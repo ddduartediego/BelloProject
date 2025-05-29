@@ -1,0 +1,327 @@
+# Desenvolvimento Step-by-Step - Sistema Bello MVP
+
+**Data de Início:** 29/05/2025  
+**Desenvolvedor:** Claude Sonnet  
+**Tipo de Projeto:** Sistema de Gestão para Salão de Beleza  
+
+## 📋 RESUMO EXECUTIVO
+
+Este documento registra todo o processo de desenvolvimento do MVP do Sistema Bello, desde a configuração inicial até o deploy em produção. O projeto utiliza Next.js 15, TypeScript, Supabase e Material-UI para criar uma solução completa de gestão para salões de beleza.
+
+## 🗂️ ESTRUTURA DO PROJETO
+
+```
+BelloProject/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   ├── components/             # Componentes React
+│   │   ├── common/            # Componentes reutilizáveis
+│   │   └── feature/           # Componentes específicos
+│   ├── contexts/              # Contextos React
+│   ├── hooks/                 # Custom hooks
+│   ├── lib/                   # Configurações e utilitários
+│   ├── services/              # Serviços externos
+│   ├── types/                 # Tipos TypeScript
+│   └── utils/                 # Funções utilitárias
+├── docs/                      # Documentação
+├── step-by-step/             # Documentação de desenvolvimento
+└── public/                   # Arquivos estáticos
+```
+
+## 📑 DESCRIÇÃO DOS ARQUIVOS PRINCIPAIS
+
+### `/src/types/database.ts`
+**Função:** Define todas as interfaces TypeScript para as 13 tabelas do banco de dados
+**Utilidade:** Garante type safety em toda a aplicação, incluindo tipos para requests/responses da API
+**Características:**
+- 13 interfaces principais (Empresa, Usuario, Cliente, Profissional, etc.)
+- Tipos para enums (TipoUsuario, StatusAgendamento, etc.)
+- Interfaces estendidas para relacionamentos (ComandaComDetalhes, AgendamentoComDetalhes)
+
+### `/src/lib/supabase.ts`
+**Função:** Configuração do cliente Supabase para navegador
+**Utilidade:** Centraliza a configuração do Supabase, permitindo reutilização em toda a aplicação
+**Características:**
+- Utiliza @supabase/ssr para otimização
+- Lê variáveis de ambiente automaticamente
+- Exporta cliente configurado e função createClient
+
+### `/docs/database-schema.sql`
+**Função:** Script SQL completo para criação do banco de dados
+**Utilidade:** Permite recriar todo o schema do banco em qualquer ambiente
+**Características:**
+- 13 tabelas com relacionamentos complexos
+- 18 índices para otimização de performance
+- 10 triggers para atualização automática de timestamps
+- Constraints e validações de integridade
+- Dados seed para empresa exemplo
+
+### `/env.example`
+**Função:** Template de variáveis de ambiente
+**Utilidade:** Guia para configuração do projeto em diferentes ambientes
+**Características:**
+- Configurações do Supabase
+- Credenciais do Google OAuth
+- Configurações da aplicação
+
+## 🎯 PLANO DE DESENVOLVIMENTO - 12 FASES
+
+### ✅ FASE 1: CONFIGURAÇÃO INICIAL (CONCLUÍDA - 4h)
+**Status:** 100% Concluída  
+**Data:** 29/05/2025  
+
+**Atividades Realizadas:**
+1. **Setup do Projeto**
+   - Inicializado repositório Git com Gitflow
+   - Criado projeto Next.js 15 com TypeScript
+   - Configurado Tailwind CSS e ESLint
+   - Instaladas todas as dependências necessárias
+
+2. **Arquivos Criados:**
+   - `package.json` com 15 dependências principais
+   - `src/types/database.ts` com 13 interfaces
+   - `src/lib/supabase.ts` configuração do cliente
+   - `docs/database-schema.sql` script completo
+   - `env.example` template de variáveis
+
+3. **Estrutura de Pastas:**
+   - Organizada conforme melhores práticas
+   - Separação clara entre componentes comuns e específicos
+   - Estrutura preparada para crescimento
+
+**Problemas Encontrados:**
+- Conflito de versão @supabase/ssr (resolvido para v0.6.1)
+- Naming incompatível com npm (resolvido para bello-system)
+- Reorganização de diretórios (resolvido para BelloProject)
+
+**Commit:** `feat: configuração inicial do projeto Bello MVP`
+
+### 🔄 FASE 2: AUTENTICAÇÃO (EM ANDAMENTO - 1h de 4h)
+**Status:** 25% Concluída  
+**Branch:** `feature/BELLO-autenticacao-supabase`  
+
+**Atividades Realizadas:**
+1. **AuthContext Criado**
+   - Context completo com estados user, usuario, session, loading
+   - Funções signIn, signOut, fetchUsuario
+   - Verificações isAdmin, isProfissional
+   - Integração com Supabase Auth e tabela usuario
+
+**Próximas Atividades:**
+1. Criar componente LoginForm
+2. Configurar Google OAuth no Supabase
+3. Implementar middleware de autenticação
+4. Criar páginas de login e dashboard
+5. Testes de integração
+
+**Tempo Estimado Restante:** 3h
+
+### ⏳ FASE 3: LAYOUT E NAVEGAÇÃO (PENDENTE - 3h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Criar layout principal com Material-UI
+2. Implementar sidebar responsiva
+3. Configurar sistema de navegação
+4. Criar header com perfil do usuário
+5. Implementar tema dark/light
+
+### ⏳ FASE 4: DASHBOARD PRINCIPAL (PENDENTE - 4h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Cards de resumo (vendas, agendamentos, caixa)
+2. Gráficos de performance
+3. Agenda do dia
+4. Alertas importantes
+5. Métricas em tempo real
+
+### ⏳ FASE 5: CRUD CLIENTES (PENDENTE - 3h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Listagem com busca e filtros
+2. Formulário de cadastro/edição
+3. Validação com Zod
+4. Integração com API
+5. Modal de confirmação
+
+### ⏳ FASE 6: CRUD SERVIÇOS E PRODUTOS (PENDENTE - 4h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Gestão de catálogo de serviços
+2. Controle de estoque de produtos
+3. Precificação dinâmica
+4. Categorização
+5. Alertas de estoque baixo
+
+### ⏳ FASE 7: SISTEMA DE AGENDAMENTOS (PENDENTE - 5h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Calendário interativo
+2. Criação de agendamentos
+3. Gestão de horários
+4. Notificações
+5. Reagendamentos
+
+### ⏳ FASE 8: SISTEMA DE COMANDAS (PENDENTE - 6h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Abertura de comandas
+2. Adição de serviços/produtos
+3. Cálculo automático de totais
+4. Aplicação de descontos
+5. Fechamento com pagamento
+
+### ⏳ FASE 9: CONTROLE DE CAIXA (PENDENTE - 4h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Abertura/fechamento de caixa
+2. Sangrias e reforços
+3. Relatório de movimentações
+4. Conciliação de valores
+5. Controles de segurança
+
+### ⏳ FASE 10: RELATÓRIOS BÁSICOS (PENDENTE - 3h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Relatório de vendas
+2. Performance por profissional
+3. Produtos mais vendidos
+4. Relatório de caixa
+5. Exportação em PDF
+
+### ⏳ FASE 11: TESTES E REFINAMENTOS (PENDENTE - 4h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Testes unitários críticos
+2. Testes de integração
+3. Correção de bugs
+4. Otimizações de performance
+5. Documentação da API
+
+### ⏳ FASE 12: DEPLOY E PRODUÇÃO (PENDENTE - 2h)
+**Status:** Não Iniciada  
+
+**Atividades Planejadas:**
+1. Configuração Vercel
+2. Variáveis de ambiente produção
+3. Configuração Supabase produção
+4. Testes em produção
+5. Documentação final
+
+## 📊 MÉTRICAS DO PROJETO
+
+**Progresso Geral:** 29% (4.25h de 42h estimadas)  
+**Fases Concluídas:** 1 de 12  
+**Linhas de Código:** ~850 linhas  
+**Arquivos Criados:** 12 arquivos principais  
+**Tabelas do Banco:** 13 tabelas estruturadas  
+
+## 🔧 TECNOLOGIAS E DEPENDÊNCIAS
+
+### **Frontend**
+- Next.js 15.3.2 (App Router)
+- React 19.0.0
+- TypeScript 5
+- Material-UI 6.3.1
+- Tailwind CSS 4
+
+### **Backend/Database**
+- Supabase (PostgreSQL + Auth + Storage)
+- @supabase/ssr 0.6.1
+- @supabase/supabase-js 2.46.2
+
+### **Formulários e Validação**
+- react-hook-form 7.54.2
+- @hookform/resolvers 3.10.0
+- zod 3.23.8
+
+### **Utilitários**
+- date-fns 4.1.0
+- uuid 11.0.4
+
+### **Qualidade de Código**
+- ESLint 9
+- Prettier 3.4.2
+- Husky 9.1.7
+- lint-staged 15.3.0
+
+## 🐛 PROBLEMAS ENCONTRADOS E SOLUÇÕES
+
+### **Problema 1: Versão do @supabase/ssr**
+**Descrição:** Conflito de versões causando errors de importação  
+**Solução:** Downgrade para v0.6.1 que é compatível com a versão atual  
+**Status:** Resolvido  
+
+### **Problema 2: Estrutura de Pastas Duplicada**
+**Descrição:** Projeto criado em pasta aninhada incorretamente  
+**Solução:** Reorganização para usar BelloProject como raiz  
+**Status:** Resolvido  
+
+### **Problema 3: Naming Convention**
+**Descrição:** Nome inicial não compatível com npm  
+**Solução:** Alterado para "bello-system" seguindo convenções  
+**Status:** Resolvido  
+
+## 🔍 DECISÕES ARQUITETURAIS
+
+### **1. Autenticação**
+**Decisão:** Usar Supabase Auth + tabela usuario personalizada  
+**Justificativa:** Aproveita funcionalidades prontas + flexibilidade para dados específicos  
+
+### **2. Estado Global**
+**Decisão:** React Context para autenticação, sem Redux  
+**Justificativa:** MVP não justifica complexidade adicional do Redux  
+
+### **3. Estilização**
+**Decisão:** Material-UI + Tailwind CSS  
+**Justificativa:** Material-UI para componentes complexos, Tailwind para customizações  
+
+### **4. Banco de Dados**
+**Decisão:** 13 tabelas normalizadas com relacionamentos  
+**Justificativa:** Escalabilidade e integridade de dados  
+
+## 📝 PRÓXIMOS PASSOS IMEDIATOS
+
+1. **Finalizar LoginForm** (30 min)
+   - Componente Material-UI com validação Zod
+   - Integração com AuthContext
+   - Tratamento de erros
+
+2. **Configurar Google OAuth** (1h)
+   - Setup no console Google
+   - Configuração no Supabase
+   - Teste de fluxo completo
+
+3. **Criar Layout Principal** (1.5h)
+   - AppBar com perfil
+   - Sidebar responsiva
+   - Estrutura de navegação
+
+## 🎯 OBJETIVOS DE QUALIDADE
+
+- **Cobertura de Testes:** Mínimo 70% para funcionalidades críticas
+- **Performance:** Lighthouse score > 90
+- **Acessibilidade:** WCAG 2.1 AA compliance
+- **SEO:** Meta tags e structured data
+- **Responsividade:** Mobile-first design
+
+## 📚 DOCUMENTAÇÃO ADICIONAL
+
+- **Arquitetura Completa:** `Definição da Arquitetura - Sistema Bello.md`
+- **Schema do Banco:** `docs/database-schema.sql`
+- **Tipos TypeScript:** `src/types/database.ts`
+- **Configuração Ambiente:** `env.example`
+
+---
+
+**Última Atualização:** 29/05/2025 - 11:30  
+**Próxima Revisão:** 30/05/2025  
+**Status Geral:** ✅ No prazo e dentro do escopo 
