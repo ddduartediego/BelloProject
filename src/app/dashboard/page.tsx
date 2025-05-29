@@ -7,19 +7,23 @@ import {
   Typography, 
   Card, 
   CardContent,
-  AppBar,
-  Toolbar,
-  IconButton,
+  Grid,
+  Paper,
+  Chip,
 } from '@mui/material'
 import { 
-  Logout as LogoutIcon,
-  ContentCut as ScissorsIcon,
+  TrendingUp as TrendingUpIcon,
+  CalendarToday as CalendarIcon,
+  People as PeopleIcon,
+  LocalAtm as CashIcon,
 } from '@mui/icons-material'
 import { useAuth } from '@/contexts/AuthContext'
+import Layout from '@/components/common/Layout'
+import LoadingScreen from '@/components/common/LoadingScreen'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, usuario, isAuthenticated, signOut, loading } = useAuth()
+  const { user, usuario, isAuthenticated, loading } = useAuth()
 
   useEffect(() => {
     if (!loading && !isAuthenticated()) {
@@ -27,17 +31,8 @@ export default function DashboardPage() {
     }
   }, [loading, isAuthenticated, router])
 
-  const handleLogout = async () => {
-    await signOut()
-    router.push('/login')
-  }
-
   if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <Typography>Carregando...</Typography>
-      </Box>
-    )
+    return <LoadingScreen message="Carregando dashboard..." />
   }
 
   if (!isAuthenticated()) {
@@ -45,72 +40,236 @@ export default function DashboardPage() {
   }
 
   return (
-    <Box sx={{ flexGrow: 1 }}>
-      <AppBar position="static">
-        <Toolbar>
-          <ScissorsIcon sx={{ mr: 2 }} />
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Bello System
+    <Layout>
+      <Box>
+        {/* Header da página */}
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" fontWeight="bold" gutterBottom>
+            Dashboard
           </Typography>
-          <Typography variant="body2" sx={{ mr: 2 }}>
-            Olá, {usuario?.nome_completo || user?.email}
-          </Typography>
-          <IconButton
-            size="large"
-            aria-label="logout"
-            color="inherit"
-            onClick={handleLogout}
-          >
-            <LogoutIcon />
-          </IconButton>
-        </Toolbar>
-      </AppBar>
-
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Dashboard
-        </Typography>
-        
-        <Card sx={{ mt: 3 }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Bem-vindo ao Sistema Bello!
-            </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
-              Este é o MVP do sistema de gestão para salões de beleza.
-            </Typography>
-            
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2">
-                <strong>Usuário:</strong> {user?.email}
-              </Typography>
-              {usuario && (
-                <>
-                  <Typography variant="body2">
-                    <strong>Nome:</strong> {usuario.nome_completo}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Tipo:</strong> {usuario.tipo_usuario}
-                  </Typography>
-                </>
-              )}
-            </Box>
-          </CardContent>
-        </Card>
-
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Próximas Funcionalidades
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            • Gestão de Clientes<br />
-            • Agendamentos<br />
-            • Comandas<br />
-            • Controle de Caixa<br />
-            • Relatórios
+          <Typography variant="body1" color="text.secondary">
+            Visão geral do seu salão de beleza
           </Typography>
         </Box>
+
+        {/* Cards de resumo */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box
+                    sx={{
+                      bgcolor: 'primary.main',
+                      color: 'primary.contrastText',
+                      p: 1,
+                      borderRadius: 2,
+                    }}
+                  >
+                    <TrendingUpIcon />
+                  </Box>
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold">
+                      R$ 2.850,00
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Vendas Hoje
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box
+                    sx={{
+                      bgcolor: 'secondary.main',
+                      color: 'secondary.contrastText',
+                      p: 1,
+                      borderRadius: 2,
+                    }}
+                  >
+                    <CalendarIcon />
+                  </Box>
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold">
+                      12
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Agendamentos Hoje
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box
+                    sx={{
+                      bgcolor: 'success.main',
+                      color: 'success.contrastText',
+                      p: 1,
+                      borderRadius: 2,
+                    }}
+                  >
+                    <PeopleIcon />
+                  </Box>
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold">
+                      47
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Clientes Ativos
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box
+                    sx={{
+                      bgcolor: 'info.main',
+                      color: 'info.contrastText',
+                      p: 1,
+                      borderRadius: 2,
+                    }}
+                  >
+                    <CashIcon />
+                  </Box>
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold">
+                      <Chip 
+                        label="ABERTO" 
+                        color="success" 
+                        size="small"
+                        sx={{ fontWeight: 'bold' }}
+                      />
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Status do Caixa
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+
+        {/* Conteúdo principal */}
+        <Grid container spacing={3}>
+          {/* Informações do usuário */}
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Informações do Usuário
+                </Typography>
+                
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Email:</strong> {user?.email}
+                  </Typography>
+                  {usuario && (
+                    <>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        <strong>Nome:</strong> {usuario.nome_completo}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        <strong>Tipo:</strong> 
+                        <Chip 
+                          label={usuario.tipo_usuario} 
+                          size="small" 
+                          color={usuario.tipo_usuario === 'ADMINISTRADOR' ? 'primary' : 'secondary'}
+                          sx={{ ml: 1 }}
+                        />
+                      </Typography>
+                    </>
+                  )}
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Atividades recentes */}
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Atividades Recentes
+                </Typography>
+                
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    • Sistema iniciado com sucesso<br />
+                    • Autenticação configurada<br />
+                    • Layout principal implementado<br />
+                    • Navegação responsiva ativa<br />
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Próximas funcionalidades */}
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Próximas Funcionalidades do MVP
+                </Typography>
+                
+                <Grid container spacing={2} sx={{ mt: 1 }}>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Paper sx={{ p: 2, textAlign: 'center' }}>
+                      <PeopleIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
+                      <Typography variant="body2" fontWeight="medium">
+                        Gestão de Clientes
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Paper sx={{ p: 2, textAlign: 'center' }}>
+                      <CalendarIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
+                      <Typography variant="body2" fontWeight="medium">
+                        Sistema de Agendamentos
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Paper sx={{ p: 2, textAlign: 'center' }}>
+                      <TrendingUpIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
+                      <Typography variant="body2" fontWeight="medium">
+                        Controle de Comandas
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Paper sx={{ p: 2, textAlign: 'center' }}>
+                      <CashIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
+                      <Typography variant="body2" fontWeight="medium">
+                        Gestão de Caixa
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       </Box>
-    </Box>
+    </Layout>
   )
 } 

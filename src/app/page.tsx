@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Box, CircularProgress, Typography } from '@mui/material'
 import { useAuth } from '@/contexts/AuthContext'
+import LoadingScreen from '@/components/common/LoadingScreen'
 
 export default function HomePage() {
   const router = useRouter()
@@ -20,21 +20,5 @@ export default function HomePage() {
   }, [loading, isAuthenticated, router])
 
   // Tela de loading enquanto verifica autenticação
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        gap: 2,
-      }}
-    >
-      <CircularProgress size={40} />
-      <Typography variant="body1" color="text.secondary">
-        Carregando Bello System...
-      </Typography>
-    </Box>
-  )
+  return <LoadingScreen message="Verificando autenticação..." />
 }
