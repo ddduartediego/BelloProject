@@ -16,15 +16,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Divider,
 } from '@mui/material'
 import {
   AccountBalance as CaixaIcon,
   TrendingUp as EntradaIcon,
   TrendingDown as SaidaIcon,
-  MonetizationOn as MoneyIcon,
   Assessment as AnalysisIcon,
-  SwapHoriz as MovimentacaoIcon,
 } from '@mui/icons-material'
 import {
   LineChart,
@@ -35,11 +32,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts'
 import { FiltrosData } from '@/app/relatorios/page'
 
@@ -47,7 +39,7 @@ interface RelatorioCaixaProps {
   filtros: FiltrosData
 }
 
-export default function RelatorioCaixa({ filtros }: RelatorioCaixaProps) {
+export default function RelatorioCaixa({ }: RelatorioCaixaProps) {
   const movimentacoesCaixa = [
     {
       id: '1',
@@ -144,7 +136,15 @@ export default function RelatorioCaixa({ filtros }: RelatorioCaixaProps) {
     return diferenca > 0 ? 'warning.main' : 'error.main'
   }
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: {
+    active?: boolean;
+    payload?: Array<{
+      name: string;
+      value: number;
+      color: string;
+    }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
         <Box sx={{ 
@@ -158,7 +158,7 @@ export default function RelatorioCaixa({ filtros }: RelatorioCaixaProps) {
           <Typography variant="body2" fontWeight="bold">
             {label}
           </Typography>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <Typography key={index} variant="body2" sx={{ color: entry.color }}>
               {entry.name}: {formatCurrency(entry.value)}
             </Typography>

@@ -21,9 +21,7 @@ import {
 } from '@mui/material'
 import {
   Inventory as InventoryIcon,
-  Warning as WarningIcon,
   TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
   MonetizationOn as MoneyIcon,
   ShoppingCart as CartIcon,
 } from '@mui/icons-material'
@@ -36,9 +34,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts'
 import { FiltrosData } from '@/app/relatorios/page'
 
@@ -46,7 +41,7 @@ interface RelatorioProdutosProps {
   filtros: FiltrosData
 }
 
-export default function RelatorioProdutos({ filtros }: RelatorioProdutosProps) {
+export default function RelatorioProdutos({ }: RelatorioProdutosProps) {
   const produtos = [
     {
       id: '1',
@@ -142,13 +137,6 @@ export default function RelatorioProdutos({ filtros }: RelatorioProdutosProps) {
     margem: prod.margem,
   }))
 
-  const dadosEstoque = produtos.map(prod => ({
-    nome: prod.nome.split(' ')[0],
-    atual: prod.estoque,
-    minimo: prod.estoqueMinimo,
-    percentual: (prod.estoque / prod.estoqueMinimo) * 100,
-  }))
-
   const cores = ['#1976d2', '#388e3c', '#f57c00', '#7b1fa2', '#c62828', '#00796b']
 
   const resumoMetricas = {
@@ -188,7 +176,16 @@ export default function RelatorioProdutos({ filtros }: RelatorioProdutosProps) {
     }
   }
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: {
+    active?: boolean;
+    payload?: Array<{
+      name: string;
+      value: number;
+      color: string;
+      dataKey: string;
+    }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
         <Box sx={{ 
@@ -202,7 +199,7 @@ export default function RelatorioProdutos({ filtros }: RelatorioProdutosProps) {
           <Typography variant="body2" fontWeight="bold">
             {label}
           </Typography>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <Typography key={index} variant="body2" sx={{ color: entry.color }}>
               {entry.name}: {
                 entry.dataKey === 'receita' ? formatCurrency(entry.value) :
@@ -432,7 +429,7 @@ export default function RelatorioProdutos({ filtros }: RelatorioProdutosProps) {
                     <Chip
                       label={getStatusLabel(produto.status)}
                       size="small"
-                      color={getStatusColor(produto.status) as any}
+                      color={getStatusColor(produto.status) as 'error' | 'warning' | 'success'}
                       variant={produto.status === 'ok' ? 'outlined' : 'filled'}
                     />
                   </TableCell>

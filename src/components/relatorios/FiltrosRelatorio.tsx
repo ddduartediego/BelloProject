@@ -12,8 +12,6 @@ import {
   MenuItem,
   Button,
   Stack,
-  useMediaQuery,
-  useTheme,
 } from '@mui/material'
 import {
   FilterList as FilterIcon,
@@ -35,8 +33,6 @@ interface FiltrosRelatorioProps {
 }
 
 export default function FiltrosRelatorio({ filtros, onChange }: FiltrosRelatorioProps) {
-  const theme = useTheme()
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
 
   const periodos: { value: PeriodoRelatorio; label: string; icon: React.ReactNode }[] = [
     { value: 'hoje', label: 'Hoje', icon: <HojeIcon /> },

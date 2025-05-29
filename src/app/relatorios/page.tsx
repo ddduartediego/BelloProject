@@ -6,8 +6,6 @@ import {
   Typography,
   Container,
   Grid,
-  Card,
-  CardContent,
   Button,
   useMediaQuery,
   useTheme,

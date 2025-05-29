@@ -20,6 +20,9 @@ import {
   useMediaQuery,
   useTheme,
   Dialog,
+  FormControl,
+  InputLabel,
+  Select,
 } from '@mui/material'
 import {
   Add as AddIcon,
@@ -28,6 +31,9 @@ import {
   Edit as EditIcon,
   Search as SearchIcon,
   FilterList as FilterIcon,
+  Person as ClienteIcon,
+  Schedule as HorarioIcon,
+  MonetizationOn as MoneyIcon,
 } from '@mui/icons-material'
 import Layout from '@/components/common/Layout'
 import ComandaForm from '@/components/comandas/ComandaForm'
@@ -197,7 +203,7 @@ export default function ComandasPage() {
   const [snackbar, setSnackbar] = useState<{
     open: boolean
     message: string
-    severity: 'success' | 'error'
+    severity: 'success' | 'error' | 'warning' | 'info'
   }>({
     open: false,
     message: '',
@@ -205,7 +211,7 @@ export default function ComandasPage() {
   })
 
   // Função para mostrar notificação
-  const showSnackbar = (message: string, severity: 'success' | 'error' = 'success') => {
+  const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
     setSnackbar({ open: true, message, severity })
   }
 
@@ -419,9 +425,9 @@ export default function ComandasPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ABERTA':
-        return 'success'
+        return 'warning'
       case 'FECHADA':
-        return 'info'
+        return 'success'
       case 'CANCELADA':
         return 'error'
       default:
@@ -504,18 +510,19 @@ export default function ComandasPage() {
               />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
-              <TextField
-                select
-                fullWidth
-                label="Status"
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-              >
-                <MenuItem value="todos">Todos</MenuItem>
-                <MenuItem value="aberta">Abertas</MenuItem>
-                <MenuItem value="fechada">Fechadas</MenuItem>
-                <MenuItem value="cancelada">Canceladas</MenuItem>
-              </TextField>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={filtroStatus}
+                  label="Status"
+                  onChange={(e) => setFiltroStatus(e.target.value as typeof filtroStatus)}
+                >
+                  <MenuItem value="todos">Todos</MenuItem>
+                  <MenuItem value="aberta">Abertas</MenuItem>
+                  <MenuItem value="fechada">Fechadas</MenuItem>
+                  <MenuItem value="cancelada">Canceladas</MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
           </Grid>
         </Box>
@@ -636,24 +643,13 @@ export default function ComandasPage() {
 
         {/* Detalhes da Comanda */}
         {selectedComanda && (
-          <Dialog
+          <ComandaDetalhes
+            comanda={selectedComanda}
             open={comandaDetalhesOpen}
             onClose={() => setComandaDetalhesOpen(false)}
-            maxWidth="lg"
-            fullWidth
-            fullScreen={isMobile}
-          >
-            <ComandaDetalhes
-              comanda={selectedComanda}
-              onAddItem={handleAddItem}
-              onUpdateItem={() => {}}
-              onDeleteItem={handleDeleteItem}
-              onApplyDiscount={handleApplyDiscount}
-              onFinishComanda={handleFinishComanda}
-              onUpdateComanda={() => {}}
-              onClose={() => setComandaDetalhesOpen(false)}
-            />
-          </Dialog>
+            onFinishComanda={handleFinishComanda}
+            onUpdateComanda={() => {}}
+          />
         )}
 
         {/* Modal de Pagamento */}

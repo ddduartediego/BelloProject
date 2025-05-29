@@ -11,7 +11,6 @@ import {
   Avatar,
   Stack,
   Chip,
-  LinearProgress,
   Table,
   TableBody,
   TableCell,
@@ -20,11 +19,8 @@ import {
   TableRow,
 } from '@mui/material'
 import {
-  Person as PersonIcon,
   Star as StarIcon,
   TrendingUp as TrendingUpIcon,
-  Schedule as ScheduleIcon,
-  MonetizationOn as MoneyIcon,
 } from '@mui/icons-material'
 import {
   BarChart,
@@ -45,7 +41,7 @@ interface RelatorioProfissionaisProps {
   filtros: FiltrosData
 }
 
-export default function RelatorioProfissionais({ filtros }: RelatorioProfissionaisProps) {
+export default function RelatorioProfissionais({ }: RelatorioProfissionaisProps) {
   const profissionais = [
     {
       id: '1',
@@ -132,7 +128,16 @@ export default function RelatorioProfissionais({ filtros }: RelatorioProfissiona
     return 'error'
   }
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: {
+    active?: boolean;
+    payload?: Array<{
+      name: string;
+      value: number;
+      color: string;
+      dataKey: string;
+    }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
         <Box sx={{ 
@@ -146,7 +151,7 @@ export default function RelatorioProfissionais({ filtros }: RelatorioProfissiona
           <Typography variant="body2" fontWeight="bold">
             {label}
           </Typography>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <Typography key={index} variant="body2" sx={{ color: entry.color }}>
               {entry.name}: {
                 entry.dataKey === 'vendas' ? formatCurrency(entry.value) : 

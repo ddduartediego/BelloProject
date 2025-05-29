@@ -72,23 +72,23 @@ export default function CaixaPage() {
   }
 
   // Função para abrir caixa
-  const handleAbrirCaixa = async (saldoInicial: number) => {
+  const handleAbrirCaixa = async (saldoInicial: number, observacoes?: string) => {
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise(resolve => setTimeout(resolve, 1500))
       
       setCaixaAberto(true)
       setAbrirCaixaOpen(false)
       showSnackbar(`Caixa aberto com saldo inicial de R$ ${saldoInicial.toFixed(2).replace('.', ',')}`)
-    } catch (error) {
-      showSnackbar('Erro ao abrir caixa', 'error')
+    } catch (_error) {
+      showSnackbar('Erro ao abrir caixa. Tente novamente.', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   // Função para fechar caixa
-  const handleFecharCaixa = async (observacoes?: string) => {
+  const handleFecharCaixa = async (_observacoes?: string) => {
     setLoading(true)
     try {
       await new Promise(resolve => setTimeout(resolve, 1500))
@@ -96,25 +96,23 @@ export default function CaixaPage() {
       setCaixaAberto(false)
       setFecharCaixaOpen(false)
       showSnackbar('Caixa fechado com sucesso!')
-    } catch (error) {
-      showSnackbar('Erro ao fechar caixa', 'error')
+    } catch (_error) {
+      showSnackbar('Erro ao fechar caixa. Tente novamente.', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   // Função para adicionar movimentação
-  const handleAddMovimentacao = async (tipo: 'ENTRADA' | 'SAIDA', valor: number, descricao: string, categoria: string) => {
+  const handleAdicionarMovimentacao = async (tipo: 'ENTRADA' | 'SAIDA', valor: number, _descricao: string, _categoria?: string) => {
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
       setMovimentacaoOpen(false)
-      
-      const tipoTexto = tipo === 'ENTRADA' ? 'entrada' : 'saída'
-      showSnackbar(`${tipoTexto} de R$ ${valor.toFixed(2).replace('.', ',')} registrada!`)
-    } catch (error) {
-      showSnackbar('Erro ao registrar movimentação', 'error')
+      showSnackbar(`${tipo === 'ENTRADA' ? 'Entrada' : 'Saída'} de R$ ${valor.toFixed(2).replace('.', ',')} registrada!`)
+    } catch (_error) {
+      showSnackbar('Erro ao registrar movimentação. Tente novamente.', 'error')
     } finally {
       setLoading(false)
     }
@@ -444,7 +442,7 @@ export default function CaixaPage() {
         <MovimentacaoDialog
           open={movimentacaoOpen}
           onClose={() => setMovimentacaoOpen(false)}
-          onConfirm={handleAddMovimentacao}
+          onConfirm={handleAdicionarMovimentacao}
           tipo={tipoMovimentacao}
           loading={loading}
         />

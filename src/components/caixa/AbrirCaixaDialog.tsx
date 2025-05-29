@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -15,7 +15,7 @@ import {
 } from '@mui/material'
 import {
   Close as CloseIcon,
-  PlayArrow as AbrirIcon,
+  AccountBalance as CaixaIcon,
 } from '@mui/icons-material'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -86,7 +86,7 @@ export default function AbrirCaixaDialog({
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AbrirIcon color="success" />
+            <CaixaIcon color="success" />
             <Typography variant="h6" fontWeight="bold">
               Abrir Caixa
             </Typography>
@@ -146,7 +146,7 @@ export default function AbrirCaixaDialog({
             type="submit"
             variant="contained"
             disabled={loading || isSubmitting}
-            startIcon={<AbrirIcon />}
+            startIcon={<CaixaIcon />}
             sx={{ minWidth: 120 }}
             color="success"
           >

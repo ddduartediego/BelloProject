@@ -19,7 +19,6 @@ import {
 } from '@mui/material'
 import {
   TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
   MonetizationOn as MoneyIcon,
   Receipt as ReceiptIcon,
   ShoppingCart as VendaIcon,
@@ -33,8 +32,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  BarChart,
-  Bar,
 } from 'recharts'
 import { FiltrosData } from '@/app/relatorios/page'
 
@@ -42,7 +39,7 @@ interface RelatorioVendasProps {
   filtros: FiltrosData
 }
 
-export default function RelatorioVendas({ filtros }: RelatorioVendasProps) {
+export default function RelatorioVendas({ }: RelatorioVendasProps) {
   // Dados simulados baseados no período
   const dadosVendas = [
     { data: '01/12', vendas: 1250.00, comandas: 12, ticketMedio: 104.17 },
@@ -85,7 +82,15 @@ export default function RelatorioVendas({ filtros }: RelatorioVendasProps) {
     })
   }
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: {
+    active?: boolean;
+    payload?: Array<{
+      name: string;
+      value: number;
+      color: string;
+    }>;
+    label?: string;
+  }) => {
     if (active && payload && payload.length) {
       return (
         <Box sx={{ 
@@ -99,7 +104,7 @@ export default function RelatorioVendas({ filtros }: RelatorioVendasProps) {
           <Typography variant="body2" fontWeight="bold">
             {label}
           </Typography>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <Typography key={index} variant="body2" sx={{ color: entry.color }}>
               {entry.name}: {entry.name === 'vendas' ? formatCurrency(entry.value) : entry.value}
             </Typography>
