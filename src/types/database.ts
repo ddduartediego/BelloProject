@@ -51,7 +51,7 @@ export interface Profissional {
   especialidades?: string[]
   horarios_trabalho?: Record<string, string[]> // Ex: { "seg": ["09:00-12:00", "14:00-18:00"] }
   google_calendar_id?: string
-  google_auth_tokens?: Record<string, any> // Criptografado
+  google_auth_tokens?: Record<string, unknown> // Criptografado
   criado_em: Timestamp
   atualizado_em: Timestamp
 }

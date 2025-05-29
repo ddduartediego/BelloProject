@@ -14,17 +14,29 @@ Este documento registra todo o processo de desenvolvimento do MVP do Sistema Bel
 BelloProject/
 ├── src/
 │   ├── app/                    # Next.js App Router
+│   │   ├── login/             # Página de login
+│   │   ├── dashboard/         # Dashboard principal
+│   │   ├── layout.tsx         # Layout raiz com providers
+│   │   └── page.tsx           # Página inicial com redirecionamento
 │   ├── components/             # Componentes React
 │   │   ├── common/            # Componentes reutilizáveis
+│   │   │   └── LoginForm.tsx  # Formulário de login
 │   │   └── feature/           # Componentes específicos
 │   ├── contexts/              # Contextos React
+│   │   └── AuthContext.tsx    # Contexto de autenticação
 │   ├── hooks/                 # Custom hooks
 │   ├── lib/                   # Configurações e utilitários
+│   │   ├── supabase.ts        # Cliente Supabase
+│   │   └── theme.ts           # Tema Material-UI
 │   ├── services/              # Serviços externos
 │   ├── types/                 # Tipos TypeScript
+│   │   └── database.ts        # Tipos das 13 tabelas
 │   └── utils/                 # Funções utilitárias
 ├── docs/                      # Documentação
+│   └── database-schema.sql    # Script SQL completo
 ├── step-by-step/             # Documentação de desenvolvimento
+│   └── desenvolvimento-bello-mvp.md
+├── env.example               # Template variáveis ambiente
 └── public/                   # Arquivos estáticos
 ```
 
@@ -45,6 +57,25 @@ BelloProject/
 - Utiliza @supabase/ssr para otimização
 - Lê variáveis de ambiente automaticamente
 - Exporta cliente configurado e função createClient
+
+### `/src/contexts/AuthContext.tsx`
+**Função:** Contexto React para gerenciamento de autenticação
+**Utilidade:** Centraliza estado de autenticação e funções relacionadas
+**Características:**
+- Estados: user, usuario, session, loading
+- Funções: signIn, signOut, signInWithGoogle, fetchUsuario
+- Verificações: isAdmin, isProfissional, isAuthenticated
+- Integração completa com Supabase Auth
+
+### `/src/components/common/LoginForm.tsx`
+**Função:** Componente de formulário de login
+**Utilidade:** Interface de usuário para autenticação
+**Características:**
+- Material-UI com tema personalizado
+- Validação com react-hook-form + Zod
+- Suporte para email/senha e Google OAuth
+- Estados de loading e tratamento de erros
+- Design elegante com tema personalizado
 
 ### `/docs/database-schema.sql`
 **Função:** Script SQL completo para criação do banco de dados

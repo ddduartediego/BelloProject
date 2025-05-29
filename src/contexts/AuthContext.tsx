@@ -1,9 +1,9 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase'
-import { Usuario, TipoUsuario } from '@/types/database'
+import { Usuario } from '@/types/database'
 
 interface AuthContextType {
   // Estados
@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
 
   // Buscar dados complementares do usuário na tabela 'usuario'
-  const fetchUsuario = async () => {
+  const fetchUsuario = useCallback(async () => {
     if (!user) {
       setUsuario(null)
       return
@@ -56,16 +56,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUsuario(data || null)
-    } catch (error) {
-      console.error('Erro inesperado ao buscar usuário:', error)
+    } catch {
+      console.error('Erro inesperado ao buscar usuário')
       setUsuario(null)
     }
-  }
+  }, [user, supabase])
 
   // Função de login com email/senha
   const signIn = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       return { error: null }
-    } catch (error) {
+    } catch {
       return { error: 'Erro inesperado durante o login' }
     }
   }
@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       return { error: null }
-    } catch (error) {
+    } catch {
       return { error: 'Erro inesperado durante o login com Google' }
     }
   }
@@ -146,14 +146,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [supabase.auth])
 
   // Buscar dados do usuário quando user muda
   useEffect(() => {
     if (user) {
       fetchUsuario()
     }
-  }, [user])
+  }, [user, fetchUsuario])
 
   // Marcar loading como false após verificações iniciais
   useEffect(() => {

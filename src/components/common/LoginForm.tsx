@@ -79,7 +79,7 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
       } else {
         router.push(redirectTo)
       }
-    } catch (err) {
+    } catch {
       setError('Erro inesperado durante o login')
     } finally {
       setIsLoading(false)
@@ -99,7 +99,7 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
         setIsGoogleLoading(false)
       }
       // Se sucesso, o redirecionamento será feito automaticamente pelo Supabase
-    } catch (err) {
+    } catch {
       setError('Erro inesperado durante o login com Google')
       setIsGoogleLoading(false)
     }
