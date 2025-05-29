@@ -1,0 +1,65 @@
+---
+description: Utilize estas instruções quando solicitado para voce realizar um review
+globs: 
+alwaysApply: false
+---
+- Check with `git branch -r | grep -E "^[[:space:]]*origin/(master|develop|main)$"` for remote branches
+- Run `git branch --show-current` to know current branch
+- Move to `develop` branch if exist, or `master` if it don't
+- Do a pull to get latest changes from origin
+- Sitch back to original branch
+- Update branch (merge) with `develop` or `master` according to previous case.
+- Do a git diff to origin/develop, or origin/master if develop doesn't exist, to see the changes
+- As an expert software enginner, review the changes as if you are reviewing a Pull Request
+
+**Review Focus Areas (Please provide feedback on the following, where applicable):**
+
+1.  **Clarity and Readability:**
+    * Is the code easy to understand?
+    * Are variable and function names descriptive and clear?
+    * Is the code well-formatted and consistent with project style guides (if any)?
+    * Are comments present where necessary, and are they clear and helpful?
+
+2.  **Functionality and Correctness:**
+    * Does the code appear to achieve its intended purpose based on the context provided (or inferred)?
+    * Are there any obvious bugs, edge cases, or logical errors?
+    * Does it handle potential errors and exceptions gracefully?
+    * Are there any race conditions or concurrency issues (if applicable)?
+
+3.  **Design and Architecture:**
+    * Does the change follow good design principles (e.g., DRY, SOLID, separation of concerns)?
+    * Is the solution well-architected and maintainable?
+    * Does it introduce any unnecessary complexity?
+    * Are there any anachronisms or anti-patterns used? Could a more modern or idiomatic approach be better?
+    * Does it integrate well with the existing codebase?
+
+4.  **Efficiency and Performance:**
+    * Are there any obvious performance bottlenecks?
+    * Could any part of the code be optimized for speed or resource usage without sacrificing clarity?
+    * Is data being handled efficiently (e.g., minimizing database queries, efficient data structures)?
+
+5.  **Security:**
+    * Does the change introduce any security vulnerabilities (e.g., XSS, SQL injection, data exposure, insecure handling of secrets)?
+    * Is input validation performed correctly and thoroughly?
+    * Are authentication and authorization handled appropriately (if applicable)?
+
+6.  **Testing:**
+    * Are there accompanying tests for the changes?
+    * Do the tests adequately cover the new functionality and edge cases?
+    * Are the tests well-written and easy to understand?
+    * (If tests are not part of the diff) What tests would you recommend adding?
+
+7.  **Documentation:**
+    * Is any necessary documentation (e.g., README updates, inline comments, API documentation) updated or added?
+
+8.  **Commit Message (if the diff represents a single commit):**
+    * Is the commit message clear, concise, and descriptive?
+    * Does it follow any project conventions for commit messages?
+
+9.  **Overall Impressions and Suggestions:**
+    * What is your overall assessment of this change?
+    * Are there any alternative approaches that might be better?
+    * Do you have any suggestions for improvement not covered above?
+    * What was done well? (Positive feedback is important too!)
+
+**Please provide specific examples from the diff to support your feedback where possible. Frame your feedback constructively.**

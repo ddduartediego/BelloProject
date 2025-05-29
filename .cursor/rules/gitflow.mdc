@@ -1,0 +1,19 @@
+---
+description: Regras de gitflow para gestão do repositorio git
+globs: 
+alwaysApply: false
+---
+- If you want to create a hotfix, move to the master branch with `git checkout master`
+- If you don't want to create a hotfix, move to the develop branch with `git checkout develop`
+- Fetch the latest changes with `git pull`
+- You can only create new branches with `git checkout -b` and branches must start with `feature/`, `fix/`, `release/` or `hotfix/` as specified
+- If it's a go application:
+  - If it's a release or hotfix, in the branch, after the `/` add the current app version that you can get from the `main.go` file plus the major, minor and patch that they indicate
+- If it's a js application:
+  - If it's a release or hotfix, in the branch, after the `/` add the current app version that you can get from the `package.json` file plus the major, minor and patch that they indicate. And run the command `npm version {major/minor/patch}` that they indicate
+- If it's not a release or hotfix, in the branch, after the `/` add the text they indicate for the branch name.
+Examples:
+- For a feature: `git checkout -b feature/COP-nuevo-login`
+- For a fix: `git checkout -b fix/COP-correccion-formulario`
+- For a release (current version 1.2.3 + minor): `git checkout -b release/1.3.0`
+- For a hotfix (current version 1.2.3 + patch): `git checkout -b hotfix/1.2.4`
