@@ -131,6 +131,12 @@ const profissionaisData = {
   '3': { nome: 'Carla Santos' },
 }
 
+const clientesData = {
+  '1': { nome: 'Maria Silva Santos' },
+  '2': { nome: 'João Silva' },
+  '3': { nome: 'Amanda Costa' },
+}
+
 export default function ComandaDetalhes({
   comanda,
   onAddItem,
@@ -226,10 +232,10 @@ export default function ComandaDetalhes({
               Comanda #{comanda.id?.slice(-8).toUpperCase()}
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Cliente: {comanda.cliente?.nome || comanda.nome_cliente_avulso}
+              Cliente: {comanda.cliente?.nome || comanda.nome_cliente_avulso || 'Cliente não informado'}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Profissional: {profissionaisData[comanda.id_profissional_responsavel as keyof typeof profissionaisData]?.nome}
+              Profissional: {profissionaisData[comanda.id_profissional_responsavel as keyof typeof profissionaisData]?.nome || 'Profissional não informado'}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Aberta em: {new Date(comanda.data_abertura).toLocaleString('pt-BR')}
