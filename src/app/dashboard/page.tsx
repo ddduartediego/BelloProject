@@ -20,6 +20,9 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import Layout from '@/components/common/Layout'
 import LoadingScreen from '@/components/common/LoadingScreen'
+import VendasChart from '@/components/dashboard/VendasChart'
+import AgendaHoje from '@/components/dashboard/AgendaHoje'
+import AlertasImportantes from '@/components/dashboard/AlertasImportantes'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -168,19 +171,24 @@ export default function DashboardPage() {
           </Grid>
         </Grid>
 
-        {/* Conteúdo principal */}
+        {/* Conteúdo principal - Gráficos e informações */}
         <Grid container spacing={3}>
+          {/* Gráfico de vendas */}
+          <Grid item xs={12} lg={8}>
+            <VendasChart />
+          </Grid>
+
           {/* Informações do usuário */}
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} lg={4}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Informações do Usuário
+                <Typography variant="h6" fontWeight="bold" gutterBottom>
+                  Informações do Sistema
                 </Typography>
                 
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="body2" color="text.secondary">
-                    <strong>Email:</strong> {user?.email}
+                    <strong>Usuário:</strong> {user?.email}
                   </Typography>
                   {usuario && (
                     <>
@@ -199,36 +207,40 @@ export default function DashboardPage() {
                     </>
                   )}
                 </Box>
+
+                <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                  <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                    Status do Sistema:
+                  </Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label="Dashboard Ativo" color="success" size="small" sx={{ mr: 1, mb: 1 }} />
+                    <Chip label="Gráficos OK" color="success" size="small" sx={{ mr: 1, mb: 1 }} />
+                    <Chip label="Alertas ON" color="info" size="small" sx={{ mr: 1, mb: 1 }} />
+                  </Box>
+                </Box>
               </CardContent>
             </Card>
           </Grid>
 
-          {/* Atividades recentes */}
+          {/* Agenda do dia */}
           <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Atividades Recentes
-                </Typography>
-                
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    • Sistema iniciado com sucesso<br />
-                    • Autenticação configurada<br />
-                    • Layout principal implementado<br />
-                    • Navegação responsiva ativa<br />
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
+            <AgendaHoje />
+          </Grid>
+
+          {/* Alertas importantes */}
+          <Grid item xs={12} md={6}>
+            <AlertasImportantes />
           </Grid>
 
           {/* Próximas funcionalidades */}
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" fontWeight="bold" gutterBottom>
                   Próximas Funcionalidades do MVP
+                </Typography>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Funcionalidades que serão implementadas nas próximas fases do desenvolvimento
                 </Typography>
                 
                 <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -238,6 +250,9 @@ export default function DashboardPage() {
                       <Typography variant="body2" fontWeight="medium">
                         Gestão de Clientes
                       </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        FASE 5
+                      </Typography>
                     </Paper>
                   </Grid>
                   <Grid item xs={12} sm={6} md={3}>
@@ -245,6 +260,9 @@ export default function DashboardPage() {
                       <CalendarIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
                       <Typography variant="body2" fontWeight="medium">
                         Sistema de Agendamentos
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        FASE 7
                       </Typography>
                     </Paper>
                   </Grid>
@@ -254,6 +272,9 @@ export default function DashboardPage() {
                       <Typography variant="body2" fontWeight="medium">
                         Controle de Comandas
                       </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        FASE 8
+                      </Typography>
                     </Paper>
                   </Grid>
                   <Grid item xs={12} sm={6} md={3}>
@@ -261,6 +282,9 @@ export default function DashboardPage() {
                       <CashIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
                       <Typography variant="body2" fontWeight="medium">
                         Gestão de Caixa
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        FASE 9
                       </Typography>
                     </Paper>
                   </Grid>
