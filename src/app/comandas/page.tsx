@@ -19,6 +19,7 @@ import {
   MenuItem,
   useMediaQuery,
   useTheme,
+  Dialog,
 } from '@mui/material'
 import {
   Add as AddIcon,
@@ -31,7 +32,8 @@ import {
 import Layout from '@/components/common/Layout'
 import ComandaForm from '@/components/comandas/ComandaForm'
 import ComandaDetalhes from '@/components/comandas/ComandaDetalhes'
-import { ComandaComDetalhes, ItemComanda } from '@/types/database'
+import PaymentDialog from '@/components/comandas/PaymentDialog'
+import { ComandaComDetalhes, ItemComanda, MetodoPagamento } from '@/types/database'
 
 // Dados simulados para demonstração
 const comandasSimuladas: ComandaComDetalhes[] = [
@@ -187,6 +189,7 @@ export default function ComandasPage() {
   const [comandas, setComandas] = useState<ComandaComDetalhes[]>(comandasSimuladas)
   const [comandaFormOpen, setComandaFormOpen] = useState(false)
   const [comandaDetalhesOpen, setComandaDetalhesOpen] = useState(false)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [selectedComanda, setSelectedComanda] = useState<ComandaComDetalhes | null>(null)
   const [loading, setLoading] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState('todos')
@@ -268,6 +271,136 @@ export default function ComandasPage() {
     } catch (error) {
       console.error('Erro ao salvar comanda:', error)
       showSnackbar('Erro ao salvar comanda. Tente novamente.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Função para adicionar item à comanda
+  const handleAddItem = async (item: Partial<ItemComanda>) => {
+    if (!selectedComanda) return
+    
+    setLoading(true)
+    try {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      const novoItem = {
+        ...item,
+        id: `item-${Date.now()}`,
+        criado_em: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
+      }
+      
+      const comandaAtualizada = {
+        ...selectedComanda,
+        itens: [...(selectedComanda.itens || []), novoItem],
+        valor_total_servicos: selectedComanda.valor_total_servicos + (item.id_servico ? item.preco_total_item || 0 : 0),
+        valor_total_produtos: selectedComanda.valor_total_produtos + (item.id_produto ? item.preco_total_item || 0 : 0),
+      }
+      
+      setSelectedComanda(comandaAtualizada as ComandaComDetalhes)
+      setComandas(prev => prev.map(c => 
+        c.id === selectedComanda.id ? comandaAtualizada as ComandaComDetalhes : c
+      ))
+      
+      showSnackbar('Item adicionado com sucesso!')
+    } catch (error) {
+      showSnackbar('Erro ao adicionar item', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Função para remover item da comanda
+  const handleDeleteItem = async (itemId: string) => {
+    if (!selectedComanda) return
+    
+    setLoading(true)
+    try {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      const itemRemovido = selectedComanda.itens?.find(i => i.id === itemId)
+      if (!itemRemovido) return
+      
+      const comandaAtualizada = {
+        ...selectedComanda,
+        itens: selectedComanda.itens?.filter(i => i.id !== itemId) || [],
+        valor_total_servicos: selectedComanda.valor_total_servicos - (itemRemovido.id_servico ? itemRemovido.preco_total_item : 0),
+        valor_total_produtos: selectedComanda.valor_total_produtos - (itemRemovido.id_produto ? itemRemovido.preco_total_item : 0),
+      }
+      
+      setSelectedComanda(comandaAtualizada as ComandaComDetalhes)
+      setComandas(prev => prev.map(c => 
+        c.id === selectedComanda.id ? comandaAtualizada as ComandaComDetalhes : c
+      ))
+      
+      showSnackbar('Item removido com sucesso!')
+    } catch (error) {
+      showSnackbar('Erro ao remover item', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Função para aplicar desconto
+  const handleApplyDiscount = async (desconto: number) => {
+    if (!selectedComanda) return
+    
+    setLoading(true)
+    try {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      const comandaAtualizada = {
+        ...selectedComanda,
+        valor_desconto: desconto,
+      }
+      
+      setSelectedComanda(comandaAtualizada as ComandaComDetalhes)
+      setComandas(prev => prev.map(c => 
+        c.id === selectedComanda.id ? comandaAtualizada as ComandaComDetalhes : c
+      ))
+      
+      showSnackbar(`Desconto de R$ ${desconto.toFixed(2).replace('.', ',')} aplicado!`)
+    } catch (error) {
+      showSnackbar('Erro ao aplicar desconto', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Função para abrir modal de pagamento
+  const handleFinishComanda = () => {
+    setPaymentDialogOpen(true)
+  }
+
+  // Função para confirmar pagamento
+  const handleConfirmPayment = async (metodo: MetodoPagamento, valorPago: number) => {
+    if (!selectedComanda) return
+    
+    setLoading(true)
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      const comandaAtualizada = {
+        ...selectedComanda,
+        status: 'FECHADA' as const,
+        metodo_pagamento: metodo,
+        valor_total_pago: valorPago,
+        data_fechamento: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
+      }
+      
+      setSelectedComanda(comandaAtualizada)
+      setComandas(prev => prev.map(c => 
+        c.id === selectedComanda.id ? comandaAtualizada : c
+      ))
+      
+      setPaymentDialogOpen(false)
+      setComandaDetalhesOpen(false)
+      
+      showSnackbar('Pagamento processado com sucesso! Comanda finalizada.')
+    } catch (error) {
+      showSnackbar('Erro ao processar pagamento', 'error')
     } finally {
       setLoading(false)
     }
@@ -503,14 +636,34 @@ export default function ComandasPage() {
 
         {/* Detalhes da Comanda */}
         {selectedComanda && (
-          <ComandaDetalhes
-            comanda={selectedComanda}
-            onAddItem={() => {}}
-            onUpdateItem={() => {}}
-            onDeleteItem={() => {}}
-            onApplyDiscount={() => {}}
-            onFinishComanda={() => {}}
-            onUpdateComanda={() => {}}
+          <Dialog
+            open={comandaDetalhesOpen}
+            onClose={() => setComandaDetalhesOpen(false)}
+            maxWidth="lg"
+            fullWidth
+            fullScreen={isMobile}
+          >
+            <ComandaDetalhes
+              comanda={selectedComanda}
+              onAddItem={handleAddItem}
+              onUpdateItem={() => {}}
+              onDeleteItem={handleDeleteItem}
+              onApplyDiscount={handleApplyDiscount}
+              onFinishComanda={handleFinishComanda}
+              onUpdateComanda={() => {}}
+              onClose={() => setComandaDetalhesOpen(false)}
+            />
+          </Dialog>
+        )}
+
+        {/* Modal de Pagamento */}
+        {selectedComanda && (
+          <PaymentDialog
+            open={paymentDialogOpen}
+            onClose={() => setPaymentDialogOpen(false)}
+            onConfirm={handleConfirmPayment}
+            total={selectedComanda.valor_total_servicos + selectedComanda.valor_total_produtos - selectedComanda.valor_desconto}
+            loading={loading}
           />
         )}
 

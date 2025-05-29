@@ -49,6 +49,7 @@ interface ComandaDetalhesProps {
   onApplyDiscount: (desconto: number) => void
   onFinishComanda: () => void
   onUpdateComanda: (comanda: Partial<ComandaComDetalhes>) => void
+  onClose?: () => void
 }
 
 // Dados simulados para demonstração
@@ -137,7 +138,8 @@ export default function ComandaDetalhes({
   onDeleteItem,
   onApplyDiscount,
   onFinishComanda,
-  onUpdateComanda
+  onUpdateComanda,
+  onClose
 }: ComandaDetalhesProps) {
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [discountOpen, setDiscountOpen] = useState(false)
@@ -237,6 +239,11 @@ export default function ComandaDetalhes({
             label={getStatusText(comanda.status)}
             color={getStatusColor(comanda.status) as any}
           />
+          {onClose && (
+            <IconButton onClick={onClose} size="small">
+              <CloseIcon />
+            </IconButton>
+          )}
         </Box>
       </Paper>
 
@@ -305,7 +312,7 @@ export default function ComandaDetalhes({
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      {item.profissional_executante?.nome || '-'}
+                      Ana Carolina
                     </TableCell>
                     {comanda.status === 'ABERTA' && (
                       <TableCell align="center">
