@@ -6,6 +6,13 @@ export interface CreateComandaData {
   id_cliente?: string
   nome_cliente_avulso?: string
   id_profissional_responsavel: string
+  itens?: {
+    id_servico?: string
+    nome_servico_avulso?: string
+    preco_unitario: number
+    quantidade: number
+    servico?: any
+  }[]
 }
 
 export interface UpdateComandaData extends Partial<CreateComandaData> {
@@ -44,7 +51,7 @@ class ComandasService extends BaseService {
 
       console.log('🔍 DEBUG: EmpresaId encontrado:', empresaId)
 
-      // QUERY SIMPLIFICADA - testando campos básicos primeiro
+      // QUERY EXPANDIDA - adicionando dados relacionados de forma segura
       let query = this.supabase
         .from('comanda')
         .select(`
@@ -62,7 +69,14 @@ class ComandasService extends BaseService {
           valor_total_pago,
           metodo_pagamento,
           criado_em,
-          atualizado_em
+          atualizado_em,
+          cliente:id_cliente(id, nome, telefone, email),
+          profissional_responsavel:id_profissional_responsavel(
+            id,
+            id_usuario,
+            especialidades,
+            usuario:id_usuario(nome, email)
+          )
         `, { count: 'exact' })
         .eq('id_empresa', empresaId)
 
