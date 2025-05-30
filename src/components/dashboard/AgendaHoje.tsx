@@ -9,10 +9,10 @@ import {
   List,
   ListItem,
   ListItemAvatar,
-  ListItemText,
   Avatar,
   Chip,
   Divider,
+  Stack,
 } from '@mui/material'
 import {
   Person as PersonIcon,
@@ -170,45 +170,47 @@ export default function AgendaHoje({ title = 'Agenda de Hoje' }: AgendaHojeProps
                   </Avatar>
                 </ListItemAvatar>
                 
-                <ListItemText
-                  primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                      <Typography variant="subtitle2" fontWeight="bold">
-                        {agendamento.cliente}
-                      </Typography>
-                      <Chip
-                        icon={getStatusIcon(agendamento.status)}
-                        label={agendamento.status}
-                        color={getStatusColor(agendamento.status)}
-                        size="small"
-                      />
-                    </Box>
-                  }
-                  secondary={
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        <strong>Serviço:</strong> {agendamento.servico}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        <strong>Profissional:</strong> {agendamento.profissional}
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <TimeIcon fontSize="small" color="action" />
-                          <Typography variant="caption">
-                            {agendamento.horario} - {calcularHorarioFim(agendamento.horario, agendamento.duracao)}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <PhoneIcon fontSize="small" color="action" />
-                          <Typography variant="caption">
-                            {agendamento.telefone}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-                  }
-                />
+                {/* Estrutura manual sem ListItemText para evitar HTML inválido */}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  {/* Nome do cliente e status */}
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ flex: 1 }}>
+                      {agendamento.cliente}
+                    </Typography>
+                    <Chip
+                      icon={getStatusIcon(agendamento.status)}
+                      label={agendamento.status}
+                      color={getStatusColor(agendamento.status)}
+                      size="small"
+                    />
+                  </Stack>
+
+                  {/* Detalhes do agendamento */}
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2" color="text.secondary">
+                      <strong>Serviço:</strong> {agendamento.servico}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      <strong>Profissional:</strong> {agendamento.profissional}
+                    </Typography>
+                    
+                    {/* Horário e telefone */}
+                    <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+                      <Stack direction="row" spacing={0.5} alignItems="center">
+                        <TimeIcon fontSize="small" color="action" />
+                        <Typography variant="caption">
+                          {agendamento.horario} - {calcularHorarioFim(agendamento.horario, agendamento.duracao)}
+                        </Typography>
+                      </Stack>
+                      <Stack direction="row" spacing={0.5} alignItems="center">
+                        <PhoneIcon fontSize="small" color="action" />
+                        <Typography variant="caption">
+                          {agendamento.telefone}
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                  </Stack>
+                </Box>
                 
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                   <Typography variant="h6" fontWeight="bold" color="primary">

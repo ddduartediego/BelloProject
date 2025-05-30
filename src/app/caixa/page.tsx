@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Box,
   Typography,
@@ -17,6 +17,8 @@ import {
   useMediaQuery,
   useTheme,
   Paper,
+  CircularProgress,
+  Backdrop,
 } from '@mui/material'
 import {
   AccountBalance as CaixaIcon,
@@ -33,36 +35,135 @@ import Layout from '@/components/common/Layout'
 import AbrirCaixaDialog from '@/components/caixa/AbrirCaixaDialog'
 import FecharCaixaDialog from '@/components/caixa/FecharCaixaDialog'
 import MovimentacaoDialog from '@/components/caixa/MovimentacaoDialog'
+import { 
+  caixaService, 
+  movimentacoesCaixaService
+} from '@/services'
+import type { Caixa, MovimentacaoCaixa } from '@/types/database'
 
 export default function CaixaPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   
-  const [caixaAberto, setCaixaAberto] = useState(true)
+  const [caixaAtivo, setCaixaAtivo] = useState<Caixa | null>(null)
+  const [movimentacoes, setMovimentacoes] = useState<MovimentacaoCaixa[]>([])
+  const [estatisticas, setEstatisticas] = useState({
+    totalEntradas: 0,
+    totalSaidas: 0,
+    totalVendas: 0,
+    totalMovimentacoes: 0
+  })
+  
   const [abrirCaixaOpen, setAbrirCaixaOpen] = useState(false)
   const [fecharCaixaOpen, setFecharCaixaOpen] = useState(false)
   const [movimentacaoOpen, setMovimentacaoOpen] = useState(false)
   const [tipoMovimentacao, setTipoMovimentacao] = useState<'ENTRADA' | 'SAIDA'>('ENTRADA')
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [snackbar, setSnackbar] = useState<{
     open: boolean
     message: string
-    severity: 'success' | 'error'
+    severity: 'success' | 'error' | 'warning' | 'info'
   }>({
     open: false,
     message: '',
     severity: 'success'
   })
 
-  // Dados simulados para demonstração
-  const totalEntradas = 755.00
-  const totalSaidas = 50.00
-  const totalVendas = 655.00
-  const saldoInicial = 200.00
-  const saldoCalculado = saldoInicial + totalEntradas - totalSaidas
+  // Carregamento inicial
+  useEffect(() => {
+    carregarDadosCaixa()
+  }, [])
+
+  // Carregar dados do caixa ativo e movimentações
+  const carregarDadosCaixa = async () => {
+    try {
+      setInitialLoading(true)
+      
+      // Carregar caixa ativo
+      const { data: caixa, error: caixaError } = await caixaService.getCaixaAtivo('empresa-default')
+      
+      if (caixaError && !caixaError.includes('Nenhum caixa ativo')) {
+        console.error('Erro ao carregar caixa:', caixaError)
+        showSnackbar('Erro ao carregar dados do caixa: ' + caixaError, 'error')
+        return
+      }
+      
+      setCaixaAtivo(caixa || null)
+      
+      if (caixa) {
+        // Carregar movimentações do caixa ativo
+        await carregarMovimentacoes(caixa.id)
+        
+        // Carregar estatísticas
+        await carregarEstatisticas(caixa.id)
+      } else {
+        // Limpar dados se não há caixa ativo
+        setMovimentacoes([])
+        setEstatisticas({
+          totalEntradas: 0,
+          totalSaidas: 0,
+          totalVendas: 0,
+          totalMovimentacoes: 0
+        })
+      }
+      
+    } catch (err) {
+      console.error('Erro no carregamento:', err)
+      showSnackbar('Erro inesperado ao carregar dados', 'error')
+    } finally {
+      setInitialLoading(false)
+    }
+  }
+
+  // Carregar movimentações de um caixa específico
+  const carregarMovimentacoes = async (caixaId: string) => {
+    try {
+      const { data, error } = await movimentacoesCaixaService.getByCaixa(caixaId)
+      
+      if (error) {
+        console.error('Erro ao carregar movimentações:', error)
+        return
+      }
+      
+      setMovimentacoes(data || [])
+      
+    } catch (err) {
+      console.error('Erro ao carregar movimentações:', err)
+    }
+  }
+
+  // Carregar estatísticas do caixa
+  const carregarEstatisticas = async (caixaId: string) => {
+    try {
+      const dataHoje = new Date().toISOString().split('T')[0]
+      const { data, error } = await movimentacoesCaixaService.getRelatorioPeriodo(
+        caixaId, 
+        dataHoje, 
+        dataHoje
+      )
+      
+      if (error) {
+        console.error('Erro ao carregar estatísticas:', error)
+        return
+      }
+      
+      if (data && data.resumo) {
+        setEstatisticas({
+          totalEntradas: data.resumo.total_entradas || 0,
+          totalSaidas: data.resumo.total_saidas || 0,
+          totalVendas: data.resumo.total_vendas || 0,
+          totalMovimentacoes: data.resumo.quantidade_movimentacoes || 0
+        })
+      }
+      
+    } catch (err) {
+      console.error('Erro ao carregar estatísticas:', err)
+    }
+  }
 
   // Função para mostrar notificação
-  const showSnackbar = (message: string, severity: 'success' | 'error' = 'success') => {
+  const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
     setSnackbar({ open: true, message, severity })
   }
 
@@ -75,44 +176,111 @@ export default function CaixaPage() {
   const handleAbrirCaixa = async (saldoInicial: number, observacoes?: string) => {
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const dadosAbertura = {
+        id_empresa: 'empresa-default',
+        saldo_inicial: saldoInicial,
+        observacoes: observacoes
+      }
       
-      setCaixaAberto(true)
+      const { data, error } = await caixaService.abrir(dadosAbertura)
+      
+      if (error) {
+        showSnackbar('Erro ao abrir caixa: ' + error, 'error')
+        return
+      }
+      
+      setCaixaAtivo(data)
       setAbrirCaixaOpen(false)
+      
+      // Recarregar dados
+      await carregarDadosCaixa()
+      
       showSnackbar(`Caixa aberto com saldo inicial de R$ ${saldoInicial.toFixed(2).replace('.', ',')}`)
-    } catch (_error) {
-      showSnackbar('Erro ao abrir caixa. Tente novamente.', 'error')
+      
+    } catch (err) {
+      console.error('Erro ao abrir caixa:', err)
+      showSnackbar('Erro inesperado ao abrir caixa', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   // Função para fechar caixa
-  const handleFecharCaixa = async (_observacoes?: string) => {
+  const handleFecharCaixa = async (observacoes?: string) => {
+    if (!caixaAtivo) return
+    
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const dadosFechamento = {
+        saldo_final_declarado: saldoCalculado,
+        observacoes_fechamento: observacoes
+      }
       
-      setCaixaAberto(false)
+      const { data, error } = await caixaService.fechar(caixaAtivo.id, dadosFechamento)
+      
+      if (error) {
+        showSnackbar('Erro ao fechar caixa: ' + error, 'error')
+        return
+      }
+      
+      setCaixaAtivo(null)
       setFecharCaixaOpen(false)
+      
+      // Recarregar dados
+      await carregarDadosCaixa()
+      
       showSnackbar('Caixa fechado com sucesso!')
-    } catch (_error) {
-      showSnackbar('Erro ao fechar caixa. Tente novamente.', 'error')
+      
+    } catch (err) {
+      console.error('Erro ao fechar caixa:', err)
+      showSnackbar('Erro inesperado ao fechar caixa', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   // Função para adicionar movimentação
-  const handleAdicionarMovimentacao = async (tipo: 'ENTRADA' | 'SAIDA', valor: number, _descricao: string, _categoria?: string) => {
+  const handleAdicionarMovimentacao = async (tipo: 'ENTRADA' | 'SAIDA', valor: number, descricao: string, categoria?: string) => {
+    if (!caixaAtivo) return
+    
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      let result
+      
+      if (tipo === 'ENTRADA') {
+        result = await movimentacoesCaixaService.criarReforco(
+          caixaAtivo.id, 
+          valor, 
+          descricao, 
+          'user-default' // TODO: pegar do usuário logado
+        )
+      } else {
+        result = await movimentacoesCaixaService.criarSangria(
+          caixaAtivo.id, 
+          valor, 
+          descricao, 
+          'user-default' // TODO: pegar do usuário logado
+        )
+      }
+      
+      const { data, error } = result
+      
+      if (error) {
+        showSnackbar(`Erro ao registrar ${tipo.toLowerCase()}: ` + error, 'error')
+        return
+      }
       
       setMovimentacaoOpen(false)
+      
+      // Recarregar dados
+      await carregarMovimentacoes(caixaAtivo.id)
+      await carregarEstatisticas(caixaAtivo.id)
+      
       showSnackbar(`${tipo === 'ENTRADA' ? 'Entrada' : 'Saída'} de R$ ${valor.toFixed(2).replace('.', ',')} registrada!`)
-    } catch (_error) {
-      showSnackbar('Erro ao registrar movimentação. Tente novamente.', 'error')
+      
+    } catch (err) {
+      console.error('Erro ao adicionar movimentação:', err)
+      showSnackbar('Erro inesperado ao registrar movimentação', 'error')
     } finally {
       setLoading(false)
     }
@@ -123,49 +291,22 @@ export default function CaixaPage() {
     setMovimentacaoOpen(true)
   }
 
-  // Dados simulados de movimentações
-  const movimentacoes = [
-    {
-      id: '1',
-      tipo: 'ENTRADA' as const,
-      valor: 125.00,
-      descricao: 'Venda - Comanda #ABC123',
-      categoria: 'VENDA',
-      data: '2024-12-29T09:30:00Z',
-    },
-    {
-      id: '2',
-      tipo: 'ENTRADA' as const,
-      valor: 350.00,
-      descricao: 'Venda - Comanda #DEF456',
-      categoria: 'VENDA',
-      data: '2024-12-29T11:15:00Z',
-    },
-    {
-      id: '3',
-      tipo: 'SAIDA' as const,
-      valor: 50.00,
-      descricao: 'Sangria - Troco',
-      categoria: 'SANGRIA',
-      data: '2024-12-29T14:00:00Z',
-    },
-    {
-      id: '4',
-      tipo: 'ENTRADA' as const,
-      valor: 180.00,
-      descricao: 'Venda - Comanda #GHI789',
-      categoria: 'VENDA',
-      data: '2024-12-29T16:45:00Z',
-    },
-    {
-      id: '5',
-      tipo: 'ENTRADA' as const,
-      valor: 100.00,
-      descricao: 'Reforço - Dinheiro para troco',
-      categoria: 'REFORCO',
-      data: '2024-12-29T18:00:00Z',
-    },
-  ]
+  // Cálculos
+  const saldoCalculado = caixaAtivo ? 
+    caixaAtivo.saldo_inicial + estatisticas.totalEntradas - estatisticas.totalSaidas : 0
+
+  if (initialLoading) {
+    return (
+      <Layout>
+        <Backdrop open={true} sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <CircularProgress color="inherit" />
+            <Typography>Carregando dados do caixa...</Typography>
+          </Box>
+        </Backdrop>
+      </Layout>
+    )
+  }
 
   return (
     <Layout>
@@ -198,13 +339,14 @@ export default function CaixaPage() {
 
           {/* Ações do caixa */}
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            {!caixaAberto ? (
+            {!caixaAtivo ? (
               <Button
                 variant="contained"
                 startIcon={<AbrirIcon />}
                 onClick={() => setAbrirCaixaOpen(true)}
                 color="success"
                 size="large"
+                disabled={loading}
               >
                 Abrir Caixa
               </Button>
@@ -215,6 +357,7 @@ export default function CaixaPage() {
                 onClick={() => setFecharCaixaOpen(true)}
                 color="error"
                 size="large"
+                disabled={loading}
               >
                 Fechar Caixa
               </Button>
@@ -223,15 +366,15 @@ export default function CaixaPage() {
         </Box>
 
         {/* Status do Caixa */}
-        {caixaAberto && (
+        {caixaAtivo && (
           <Paper sx={{ p: 3, mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6" fontWeight="bold">
                 Status do Caixa
               </Typography>
               <Chip
-                label="Aberto"
-                color="success"
+                label={caixaAtivo.status === 'ABERTO' ? 'Aberto' : 'Fechado'}
+                color={caixaAtivo.status === 'ABERTO' ? 'success' : 'default'}
               />
             </Box>
             <Grid container spacing={2}>
@@ -240,10 +383,13 @@ export default function CaixaPage() {
                   Data de Abertura
                 </Typography>
                 <Typography variant="body1" fontWeight="medium">
-                  {new Date().toLocaleDateString('pt-BR')}
+                  {new Date(caixaAtivo.data_abertura).toLocaleDateString('pt-BR')}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  08:00
+                  {new Date(caixaAtivo.data_abertura).toLocaleTimeString('pt-BR', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -251,7 +397,7 @@ export default function CaixaPage() {
                   Saldo Inicial
                 </Typography>
                 <Typography variant="h6" color="primary">
-                  R$ {saldoInicial.toFixed(2).replace('.', ',')}
+                  R$ {caixaAtivo.saldo_inicial.toFixed(2).replace('.', ',')}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -260,6 +406,14 @@ export default function CaixaPage() {
                 </Typography>
                 <Typography variant="h6" color="success.main">
                   R$ {saldoCalculado.toFixed(2).replace('.', ',')}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body2" color="text.secondary">
+                  Movimentações
+                </Typography>
+                <Typography variant="h6" color="info.main">
+                  {movimentacoes.length}
                 </Typography>
               </Grid>
             </Grid>
@@ -275,7 +429,7 @@ export default function CaixaPage() {
                   <EntradaIcon sx={{ fontSize: 40, color: 'success.main' }} />
                   <Box>
                     <Typography variant="h5" fontWeight="bold" color="success.main">
-                      R$ {totalEntradas.toFixed(2).replace('.', ',')}
+                      R$ {estatisticas.totalEntradas.toFixed(2).replace('.', ',')}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Total de Entradas
@@ -293,7 +447,7 @@ export default function CaixaPage() {
                   <SaidaIcon sx={{ fontSize: 40, color: 'error.main' }} />
                   <Box>
                     <Typography variant="h5" fontWeight="bold" color="error.main">
-                      R$ {totalSaidas.toFixed(2).replace('.', ',')}
+                      R$ {estatisticas.totalSaidas.toFixed(2).replace('.', ',')}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Total de Saídas
@@ -311,7 +465,7 @@ export default function CaixaPage() {
                   <MoneyIcon sx={{ fontSize: 40, color: 'primary.main' }} />
                   <Box>
                     <Typography variant="h5" fontWeight="bold" color="primary.main">
-                      R$ {totalVendas.toFixed(2).replace('.', ',')}
+                      R$ {estatisticas.totalVendas.toFixed(2).replace('.', ',')}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Total de Vendas
@@ -329,7 +483,7 @@ export default function CaixaPage() {
                   <RelatorioIcon sx={{ fontSize: 40, color: 'info.main' }} />
                   <Box>
                     <Typography variant="h5" fontWeight="bold" color="info.main">
-                      {movimentacoes.length}
+                      {estatisticas.totalMovimentacoes}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Movimentações
@@ -342,7 +496,7 @@ export default function CaixaPage() {
         </Grid>
 
         {/* Ações de Movimentação */}
-        {caixaAberto && (
+        {caixaAtivo && (
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
               Movimentações
@@ -353,6 +507,7 @@ export default function CaixaPage() {
                 startIcon={<AddIcon />}
                 onClick={() => handleMovimentacao('ENTRADA')}
                 color="success"
+                disabled={loading}
               >
                 Entrada
               </Button>
@@ -361,6 +516,7 @@ export default function CaixaPage() {
                 startIcon={<RemoveIcon />}
                 onClick={() => handleMovimentacao('SAIDA')}
                 color="error"
+                disabled={loading}
               >
                 Saída
               </Button>
@@ -374,42 +530,56 @@ export default function CaixaPage() {
             Histórico de Movimentações
           </Typography>
           
-          <Stack spacing={1}>
-            {movimentacoes.map((mov, index) => (
-              <Box key={mov.id}>
-                <Box sx={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center',
-                  py: 2
-                }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {mov.tipo === 'ENTRADA' ? (
-                      <EntradaIcon sx={{ color: 'success.main' }} />
-                    ) : (
-                      <SaidaIcon sx={{ color: 'error.main' }} />
-                    )}
-                    <Box>
-                      <Typography variant="body1" fontWeight="medium">
-                        {mov.descricao}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(mov.data).toLocaleString('pt-BR')} • {mov.categoria}
-                      </Typography>
+          {movimentacoes.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>
+              <MoneyIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+              <Typography variant="h6" gutterBottom>
+                Nenhuma movimentação encontrada
+              </Typography>
+              <Typography variant="body2">
+                {caixaAtivo 
+                  ? 'As movimentações aparecerão aqui conforme forem registradas.'
+                  : 'Abra o caixa para começar a registrar movimentações.'}
+              </Typography>
+            </Box>
+          ) : (
+            <Stack spacing={1}>
+              {movimentacoes.map((mov, index) => (
+                <Box key={mov.id}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    py: 2
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      {mov.valor > 0 ? (
+                        <EntradaIcon sx={{ color: 'success.main' }} />
+                      ) : (
+                        <SaidaIcon sx={{ color: 'error.main' }} />
+                      )}
+                      <Box>
+                        <Typography variant="body1" fontWeight="medium">
+                          {mov.descricao}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(mov.criado_em).toLocaleString('pt-BR')} • MOVIMENTACAO
+                        </Typography>
+                      </Box>
                     </Box>
+                    <Typography 
+                      variant="h6" 
+                      fontWeight="bold"
+                      color={mov.valor > 0 ? 'success.main' : 'error.main'}
+                    >
+                      {mov.valor > 0 ? '+' : '-'} R$ {Math.abs(mov.valor).toFixed(2).replace('.', ',')}
+                    </Typography>
                   </Box>
-                  <Typography 
-                    variant="h6" 
-                    fontWeight="bold"
-                    color={mov.tipo === 'ENTRADA' ? 'success.main' : 'error.main'}
-                  >
-                    {mov.tipo === 'ENTRADA' ? '+' : '-'} R$ {mov.valor.toFixed(2).replace('.', ',')}
-                  </Typography>
+                  {index < movimentacoes.length - 1 && <Divider />}
                 </Box>
-                {index < movimentacoes.length - 1 && <Divider />}
-              </Box>
-            ))}
-          </Stack>
+              ))}
+            </Stack>
+          )}
         </Paper>
 
         {/* Dialogs */}
@@ -420,24 +590,18 @@ export default function CaixaPage() {
           loading={loading}
         />
 
-        <FecharCaixaDialog
-          open={fecharCaixaOpen}
-          onClose={() => setFecharCaixaOpen(false)}
-          onConfirm={handleFecharCaixa}
-          caixa={{
-            id: 'caixa-1',
-            id_empresa: 'empresa-1',
-            data_abertura: new Date().toISOString(),
-            saldo_inicial: saldoInicial,
-            status: 'ABERTO',
-            criado_em: new Date().toISOString(),
-            atualizado_em: new Date().toISOString(),
-          }}
-          saldoCalculado={saldoCalculado}
-          totalEntradas={totalEntradas}
-          totalSaidas={totalSaidas}
-          loading={loading}
-        />
+        {caixaAtivo && (
+          <FecharCaixaDialog
+            open={fecharCaixaOpen}
+            onClose={() => setFecharCaixaOpen(false)}
+            onConfirm={handleFecharCaixa}
+            caixa={caixaAtivo}
+            saldoCalculado={saldoCalculado}
+            totalEntradas={estatisticas.totalEntradas}
+            totalSaidas={estatisticas.totalSaidas}
+            loading={loading}
+          />
+        )}
 
         <MovimentacaoDialog
           open={movimentacaoOpen}
@@ -463,6 +627,14 @@ export default function CaixaPage() {
             {snackbar.message}
           </Alert>
         </Snackbar>
+
+        {/* Loading overlay */}
+        <Backdrop 
+          open={loading} 
+          sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.modal + 1 }}
+        >
+          <CircularProgress color="inherit" />
+        </Backdrop>
       </Container>
     </Layout>
   )

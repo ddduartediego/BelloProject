@@ -33,6 +33,7 @@ import {
   ContentCut as ScissorsIcon,
   Logout as LogoutIcon,
   AccountCircle as AccountCircleIcon,
+  Work as ProfessionalsIcon,
 } from '@mui/icons-material'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
@@ -61,6 +62,16 @@ const navigationItems: NavigationItem[] = [
     text: 'Agendamentos',
     icon: <CalendarIcon />,
     path: '/agendamentos',
+  },
+  {
+    text: 'Serviços',
+    icon: <ScissorsIcon />,
+    path: '/servicos',
+  },
+  {
+    text: 'Profissionais',
+    icon: <ProfessionalsIcon />,
+    path: '/profissionais',
   },
   {
     text: 'Comandas',

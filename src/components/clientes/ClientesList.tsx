@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Card,
   CardContent,
@@ -25,8 +25,12 @@ import {
   FormControl,
   InputLabel,
   Select,
+  SelectChangeEvent,
   Grid,
   Paper,
+  CircularProgress,
+  Alert,
+  Skeleton,
 } from '@mui/material'
 import {
   Search as SearchIcon,
@@ -38,83 +42,103 @@ import {
   Email as EmailIcon,
   Cake as CakeIcon,
   FilterList as FilterIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material'
 import { Cliente } from '@/types/database'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-
-// Dados simulados para demonstração
-const clientesData: Cliente[] = [
-  {
-    id: '1',
-    nome: 'Maria Silva Santos',
-    telefone: '(11) 99999-1111',
-    email: 'maria.silva@email.com',
-    data_nascimento: '1985-03-15',
-    observacoes: 'Cliente VIP - Prefere atendimento pela manhã',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-01-15T10:00:00Z',
-    atualizado_em: '2024-12-01T15:30:00Z',
-  },
-  {
-    id: '2',
-    nome: 'João Carlos Oliveira',
-    telefone: '(11) 99999-2222',
-    email: 'joao.carlos@email.com',
-    data_nascimento: '1990-07-22',
-    observacoes: '',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-02-20T14:30:00Z',
-    atualizado_em: '2024-11-28T09:15:00Z',
-  },
-  {
-    id: '3',
-    nome: 'Amanda Costa Ferreira',
-    telefone: '(11) 99999-3333',
-    email: 'amanda.costa@email.com',
-    data_nascimento: '1992-11-08',
-    observacoes: 'Alérgica a alguns produtos químicos - verificar antes do procedimento',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-03-10T11:20:00Z',
-    atualizado_em: '2024-12-05T16:45:00Z',
-  },
-  {
-    id: '4',
-    nome: 'Pedro Henrique Santos',
-    telefone: '(11) 99999-4444',
-    email: '',
-    data_nascimento: '1988-05-30',
-    observacoes: 'Corte sempre no último sábado do mês',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-04-05T16:00:00Z',
-    atualizado_em: '2024-11-30T12:20:00Z',
-  },
-  {
-    id: '5',
-    nome: 'Lucia Fernanda Almeida',
-    telefone: '(11) 99999-5555',
-    email: 'lucia.almeida@email.com',
-    data_nascimento: '1983-12-12',
-    observacoes: '',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-05-18T09:10:00Z',
-    atualizado_em: '2024-12-03T14:00:00Z',
-  },
-]
+import { clientesService } from '@/services'
+import { PaginatedResponse } from '@/services/base.service'
 
 interface ClientesListProps {
   onEdit: (cliente: Cliente) => void
   onDelete: (cliente: Cliente) => void
+  refreshKey?: number
 }
 
-export default function ClientesList({ onEdit, onDelete }: ClientesListProps) {
+export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesListProps) {
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterType, setFilterType] = useState('todos')
-  const [page, setPage] = useState(1)
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalClientes, setTotalClientes] = useState(0)
+  const [itemsPerPage] = useState(10)
+  const [orderBy, setOrderBy] = useState('nome')
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
 
-  const rowsPerPage = 10
+  // Debounce do termo de busca
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Buscar clientes
+  const fetchClientes = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const filters = debouncedSearchTerm ? { nome: debouncedSearchTerm } : {}
+      const pagination = { page: currentPage, limit: itemsPerPage }
+
+      const response = await clientesService.getAll(pagination, filters, orderBy)
+
+      if (response.error) {
+        throw new Error(response.error)
+      }
+
+      if (response.data) {
+        setClientes(response.data.data)
+        setTotalPages(response.data.totalPages)
+        setTotalClientes(response.data.total)
+      }
+    } catch (err) {
+      console.error('Erro ao buscar clientes:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Erro inesperado'
+      setError(`Erro ao carregar clientes: ${errorMessage}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, itemsPerPage, debouncedSearchTerm, orderBy])
+
+  // Carregar clientes na inicialização e quando dependências mudarem
+  useEffect(() => {
+    fetchClientes()
+  }, [fetchClientes])
+
+  // Refresh quando refreshKey mudar
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0) {
+      fetchClientes()
+    }
+  }, [refreshKey, fetchClientes])
+
+  // Reset para primeira página quando busca mudar
+  useEffect(() => {
+    if (debouncedSearchTerm !== searchTerm) {
+      setCurrentPage(1)
+    }
+  }, [debouncedSearchTerm, searchTerm])
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value)
+  }
+
+  const handlePageChange = (_: React.ChangeEvent<unknown>, page: number) => {
+    setCurrentPage(page)
+  }
+
+  const handleOrderByChange = (event: SelectChangeEvent<string>) => {
+    setOrderBy(event.target.value)
+    setCurrentPage(1)
+  }
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, cliente: Cliente) => {
     setAnchorEl(event.currentTarget)
@@ -140,214 +164,246 @@ export default function ClientesList({ onEdit, onDelete }: ClientesListProps) {
     handleMenuClose()
   }
 
-  // Filtrar clientes baseado na busca e filtros
-  const filteredClientes = clientesData.filter(cliente => {
-    const matchesSearch = 
-      cliente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cliente.telefone.includes(searchTerm) ||
-      (cliente.email && cliente.email.toLowerCase().includes(searchTerm.toLowerCase()))
-
-    const matchesFilter = filterType === 'todos' || 
-      (filterType === 'com_email' && cliente.email) ||
-      (filterType === 'sem_email' && !cliente.email) ||
-      (filterType === 'com_aniversario' && cliente.data_nascimento)
-
-    return matchesSearch && matchesFilter
-  })
-
-  // Paginação
-  const totalPages = Math.ceil(filteredClientes.length / rowsPerPage)
-  const startIndex = (page - 1) * rowsPerPage
-  const paginatedClientes = filteredClientes.slice(startIndex, startIndex + rowsPerPage)
-
-  const formatDataNascimento = (data: string | undefined) => {
-    if (!data) return '-'
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '-'
     try {
-      return format(parseISO(data), 'dd/MM/yyyy', { locale: ptBR })
+      return format(parseISO(dateString), 'dd/MM/yyyy', { locale: ptBR })
     } catch {
       return '-'
     }
   }
 
-  const getInitials = (nome: string) => {
-    return nome
+  const formatPhone = (phone: string) => {
+    // Formatar telefone brasileiro
+    const cleaned = phone.replace(/\D/g, '')
+    if (cleaned.length === 11) {
+      return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+    } else if (cleaned.length === 10) {
+      return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
+    }
+    return phone
+  }
+
+  const getInitials = (name: string) => {
+    return name
       .split(' ')
-      .map(word => word[0])
+      .map(word => word.charAt(0))
       .join('')
-      .substring(0, 2)
       .toUpperCase()
+      .substring(0, 2)
+  }
+
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      '#1976d2', '#388e3c', '#f57c00', '#d32f2f', 
+      '#7b1fa2', '#00796b', '#5d4037', '#455a64'
+    ]
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    return colors[hash % colors.length]
   }
 
   return (
     <Card>
       <CardContent>
-        {/* Header com busca e filtros */}
+        {/* Header com controles de busca e filtros */}
         <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6" fontWeight="bold">
+              Lista de Clientes
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <IconButton 
+                onClick={fetchClientes} 
+                disabled={loading}
+                title="Atualizar lista"
+              >
+                {loading ? <CircularProgress size={20} /> : <RefreshIcon />}
+              </IconButton>
+              <Typography variant="body2" color="text.secondary">
+                Total: {totalClientes} cliente{totalClientes !== 1 ? 's' : ''}
+              </Typography>
+            </Box>
+          </Box>
+
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                placeholder="Buscar por nome, telefone ou email..."
+                variant="outlined"
+                placeholder="Pesquisar por nome, telefone ou email..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <SearchIcon color="action" />
+                      <SearchIcon />
                     </InputAdornment>
                   ),
                 }}
+                size="small"
               />
             </Grid>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
-                <InputLabel>Filtrar por</InputLabel>
+              <FormControl fullWidth size="small">
+                <InputLabel>Ordenar por</InputLabel>
                 <Select
-                  value={filterType}
-                  label="Filtrar por"
-                  onChange={(e) => setFilterType(e.target.value)}
-                  startAdornment={<FilterIcon sx={{ mr: 1, color: 'action.active' }} />}
+                  value={orderBy}
+                  label="Ordenar por"
+                  onChange={handleOrderByChange}
                 >
-                  <MenuItem value="todos">Todos os clientes</MenuItem>
-                  <MenuItem value="com_email">Com email</MenuItem>
-                  <MenuItem value="sem_email">Sem email</MenuItem>
-                  <MenuItem value="com_aniversario">Com aniversário</MenuItem>
+                  <MenuItem value="nome">Nome</MenuItem>
+                  <MenuItem value="criado_em">Data de Cadastro</MenuItem>
+                  <MenuItem value="data_nascimento">Data de Nascimento</MenuItem>
                 </Select>
               </FormControl>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'primary.50' }}>
-                <Typography variant="h6" color="primary" fontWeight="bold">
-                  {filteredClientes.length}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {filteredClientes.length === 1 ? 'Cliente encontrado' : 'Clientes encontrados'}
-                </Typography>
-              </Paper>
             </Grid>
           </Grid>
         </Box>
 
-        {/* Tabela de clientes */}
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Cliente</TableCell>
-                <TableCell>Contato</TableCell>
-                <TableCell>Aniversário</TableCell>
-                <TableCell>Cadastro</TableCell>
-                <TableCell width={100}>Ações</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paginatedClientes.map((cliente) => (
-                <TableRow key={cliente.id} hover>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar sx={{ bgcolor: 'primary.main' }}>
-                        {getInitials(cliente.nome)}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="subtitle2" fontWeight="medium">
-                          {cliente.nome}
-                        </Typography>
-                        {cliente.observacoes && (
-                          <Typography variant="caption" color="text.secondary" noWrap>
-                            {cliente.observacoes.length > 50 
-                              ? `${cliente.observacoes.substring(0, 50)}...` 
-                              : cliente.observacoes
-                            }
-                          </Typography>
-                        )}
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <PhoneIcon fontSize="small" color="action" />
-                        <Typography variant="body2">
-                          {cliente.telefone}
-                        </Typography>
-                      </Box>
-                      {cliente.email && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <EmailIcon fontSize="small" color="action" />
-                          <Typography variant="body2">
-                            {cliente.email}
-                          </Typography>
-                        </Box>
-                      )}
-                      {!cliente.email && (
-                        <Chip 
-                          label="Sem email" 
-                          size="small" 
-                          variant="outlined" 
-                          color="warning"
-                        />
-                      )}
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    {cliente.data_nascimento ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CakeIcon fontSize="small" color="action" />
-                        <Typography variant="body2">
-                          {formatDataNascimento(cliente.data_nascimento)}
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        -
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {format(parseISO(cliente.criado_em), 'dd/MM/yyyy', { locale: ptBR })}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => handleMenuOpen(e, cliente)}
-                    >
-                      <MoreVertIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        {/* Paginação */}
-        {totalPages > 1 && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-            <Pagination
-              count={totalPages}
-              page={page}
-              onChange={(_, newPage) => setPage(newPage)}
-              color="primary"
-            />
-          </Box>
+        {/* Mensagem de erro */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
         )}
 
-        {/* Estado vazio */}
-        {filteredClientes.length === 0 && (
-          <Box sx={{ textAlign: 'center', py: 6 }}>
+        {/* Loading skeleton ou conteúdo */}
+        {loading ? (
+          <Box>
+            {[...Array(5)].map((_, index) => (
+              <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 2 }}>
+                <Skeleton variant="circular" width={56} height={56} sx={{ mr: 2 }} />
+                <Box sx={{ flex: 1 }}>
+                  <Skeleton variant="text" width="40%" height={24} />
+                  <Skeleton variant="text" width="60%" height={20} />
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        ) : clientes.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 8 }}>
             <PersonIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
             <Typography variant="h6" color="text.secondary" gutterBottom>
-              Nenhum cliente encontrado
+              {searchTerm ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               {searchTerm 
-                ? 'Tente alterar os termos da busca ou filtros'
+                ? 'Tente buscar com outros termos ou limpe o filtro' 
                 : 'Comece cadastrando seu primeiro cliente'
               }
             </Typography>
           </Box>
+        ) : (
+          <>
+            {/* Tabela de clientes */}
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Cliente</TableCell>
+                    <TableCell>Contato</TableCell>
+                    <TableCell>Aniversário</TableCell>
+                    <TableCell>Cadastrado em</TableCell>
+                    <TableCell align="center">Ações</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {clientes.map((cliente) => (
+                    <TableRow key={cliente.id} hover>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Avatar
+                            sx={{
+                              bgcolor: getAvatarColor(cliente.nome),
+                              width: 56,
+                              height: 56,
+                              fontSize: '1.2rem',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            {getInitials(cliente.nome)}
+                          </Avatar>
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight="medium">
+                              {cliente.nome}
+                            </Typography>
+                            {cliente.observacoes && (
+                              <Typography variant="caption" color="text.secondary">
+                                {cliente.observacoes.length > 50 
+                                  ? `${cliente.observacoes.substring(0, 50)}...` 
+                                  : cliente.observacoes
+                                }
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                            <PhoneIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                            <Typography variant="body2">
+                              {formatPhone(cliente.telefone)}
+                            </Typography>
+                          </Box>
+                          {cliente.email && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <EmailIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                              <Typography variant="body2" color="text.secondary">
+                                {cliente.email}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        {cliente.data_nascimento ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CakeIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                            <Typography variant="body2">
+                              {formatDate(cliente.data_nascimento)}
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            -
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {formatDate(cliente.criado_em)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <IconButton
+                          onClick={(e) => handleMenuOpen(e, cliente)}
+                          size="small"
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            {/* Paginação */}
+            {totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                <Pagination
+                  count={totalPages}
+                  page={currentPage}
+                  onChange={handlePageChange}
+                  color="primary"
+                  size="large"
+                  showFirstButton
+                  showLastButton
+                />
+              </Box>
+            )}
+          </>
         )}
 
         {/* Menu de ações */}
@@ -355,14 +411,6 @@ export default function ClientesList({ onEdit, onDelete }: ClientesListProps) {
           anchorEl={anchorEl}
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
-          anchorOrigin={{
-            vertical: 'bottom',
-            horizontal: 'right',
-          }}
-          transformOrigin={{
-            vertical: 'top',
-            horizontal: 'right',
-          }}
         >
           <MenuItem onClick={handleEdit}>
             <ListItemIcon>
@@ -370,9 +418,9 @@ export default function ClientesList({ onEdit, onDelete }: ClientesListProps) {
             </ListItemIcon>
             <ListItemText>Editar</ListItemText>
           </MenuItem>
-          <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
+          <MenuItem onClick={handleDelete}>
             <ListItemIcon>
-              <DeleteIcon fontSize="small" color="error" />
+              <DeleteIcon fontSize="small" />
             </ListItemIcon>
             <ListItemText>Excluir</ListItemText>
           </MenuItem>

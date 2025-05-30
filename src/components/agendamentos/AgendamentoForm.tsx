@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -13,54 +13,50 @@ import {
   Typography,
   IconButton,
   Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Chip,
-  Stack,
+  CircularProgress,
+  Stepper,
+  Step,
+  StepLabel,
   Autocomplete,
+  Card,
+  CardContent,
+  Chip,
+  Divider,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material'
 import {
   Close as CloseIcon,
   Save as SaveIcon,
   Event as EventIcon,
+  Person as PersonIcon,
+  ContentCut as ServiceIcon,
+  Schedule as ScheduleIcon,
+  NavigateNext as NextIcon,
+  NavigateBefore as BackIcon,
   AccessTime as TimeIcon,
+  CalendarMonth as CalendarIcon,
 } from '@mui/icons-material'
-import { DatePicker, TimePicker } from '@mui/x-date-pickers'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import dayjs from 'dayjs'
-import 'dayjs/locale/pt-br'
-import { Agendamento, Cliente, Servico } from '@/types/database'
-
-dayjs.locale('pt-br')
+import { format, addDays } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import { Cliente, Servico } from '@/types/database'
+import { ProfissionalComUsuario } from '@/services/profissionais.service'
+import { clientesService, servicosService, profissionaisService } from '@/services'
+import { AgendamentoAdapter, type AgendamentoCompleto, type AgendamentoFormData as AdapterFormData } from '@/utils/agendamento-adapter'
+import ConflictChecker, { type ConflictCheckResult } from './ConflictChecker'
+import TimeSlotPicker from './TimeSlotPicker'
 
 // Schema de validação com Zod
 const agendamentoSchema = z.object({
-  id_cliente: z
-    .string()
-    .min(1, 'Cliente é obrigatório'),
-  id_profissional: z
-    .string()
-    .min(1, 'Profissional é obrigatório'),
-  data: z
-    .any()
-    .refine((val) => dayjs(val).isValid(), 'Data é obrigatória'),
-  hora_inicio: z
-    .any()
-    .refine((val) => dayjs(val).isValid(), 'Horário de início é obrigatório'),
-  servicos: z
-    .array(z.string())
-    .min(1, 'Pelo menos um serviço deve ser selecionado'),
-  observacoes: z
-    .string()
-    .max(500, 'Observações devem ter no máximo 500 caracteres')
-    .optional()
-    .or(z.literal('')),
+  id_cliente: z.string().min(1, 'Cliente é obrigatório'),
+  id_servico: z.string().min(1, 'Serviço é obrigatório'),
+  id_profissional: z.string().min(1, 'Profissional é obrigatório'),
+  data_agendamento: z.string().min(1, 'Data é obrigatória'),
+  hora_inicio: z.string().min(1, 'Horário é obrigatório'),
+  observacoes: z.string().optional()
 })
 
 type AgendamentoFormData = z.infer<typeof agendamentoSchema>
@@ -68,74 +64,17 @@ type AgendamentoFormData = z.infer<typeof agendamentoSchema>
 interface AgendamentoFormProps {
   open: boolean
   onClose: () => void
-  onSave: (agendamento: AgendamentoFormData) => void
-  agendamento?: Partial<Agendamento>
+  onSave: (data: AdapterFormData) => void
+  agendamento?: AgendamentoCompleto
   loading?: boolean
-  error?: string | null
 }
 
-// Dados simulados para demonstração
-const clientesData: Cliente[] = [
-  {
-    id: '1',
-    nome: 'Maria Silva Santos',
-    telefone: '(11) 99999-1111',
-    email: 'maria.silva@email.com',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-01-15T10:00:00Z',
-    atualizado_em: '2024-12-01T15:30:00Z',
-  },
-  {
-    id: '2',
-    nome: 'João Carlos Oliveira',
-    telefone: '(11) 99999-2222',
-    email: 'joao.carlos@email.com',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-02-20T14:30:00Z',
-    atualizado_em: '2024-11-28T09:15:00Z',
-  },
-  {
-    id: '3',
-    nome: 'Amanda Costa Ferreira',
-    telefone: '(11) 99999-3333',
-    email: 'amanda.costa@email.com',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-03-10T11:20:00Z',
-    atualizado_em: '2024-12-05T16:45:00Z',
-  },
-]
-
-const profissionaisData = [
-  { id: '1', nome: 'Ana Carolina', especialidades: ['Corte', 'Coloração'] },
-  { id: '2', nome: 'Roberto Silva', especialidades: ['Barba', 'Corte Masculino'] },
-  { id: '3', nome: 'Carla Santos', especialidades: ['Manicure', 'Pedicure'] },
-]
-
-const servicosData: Partial<Servico>[] = [
-  {
-    id: '1',
-    nome: 'Corte Feminino',
-    duracao_estimada_minutos: 60,
-    preco: 80.00,
-  },
-  {
-    id: '2',
-    nome: 'Coloração Completa',
-    duracao_estimada_minutos: 180,
-    preco: 350.00,
-  },
-  {
-    id: '3',
-    nome: 'Manicure e Pedicure',
-    duracao_estimada_minutos: 90,
-    preco: 45.00,
-  },
-  {
-    id: '4',
-    nome: 'Corte Masculino + Barba',
-    duracao_estimada_minutos: 45,
-    preco: 60.00,
-  },
+const steps = [
+  'Cliente',
+  'Serviço',
+  'Profissional',
+  'Data e Hora',
+  'Confirmação'
 ]
 
 export default function AgendamentoForm({
@@ -143,375 +82,730 @@ export default function AgendamentoForm({
   onClose,
   onSave,
   agendamento,
-  loading = false,
-  error = null
+  loading = false
 }: AgendamentoFormProps) {
-  const isEditing = !!agendamento?.id
-  const [selectedServicos, setSelectedServicos] = useState<string[]>([])
+  const [activeStep, setActiveStep] = useState(0)
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [servicos, setServicos] = useState<Servico[]>([])
+  const [profissionais, setProfissionais] = useState<ProfissionalComUsuario[]>([])
+  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
+  const [selectedServico, setSelectedServico] = useState<Servico | null>(null)
+  const [selectedProfissional, setSelectedProfissional] = useState<ProfissionalComUsuario | null>(null)
+  const [timeSelectionMode, setTimeSelectionMode] = useState<'manual' | 'picker'>('picker')
+  const [conflictCheckResult, setConflictCheckResult] = useState<ConflictCheckResult | null>(null)
+
+  const isEditing = Boolean(agendamento)
 
   const {
     control,
     handleSubmit,
     reset,
+    formState: { errors, isValid },
+    setValue,
     watch,
-    formState: { errors, isSubmitting },
+    trigger
   } = useForm<AgendamentoFormData>({
     resolver: zodResolver(agendamentoSchema),
     defaultValues: {
-      id_cliente: agendamento?.id_cliente || '',
-      id_profissional: agendamento?.id_profissional || '',
-      data: agendamento ? dayjs(agendamento.data_hora_inicio) : dayjs(),
-      hora_inicio: agendamento ? dayjs(agendamento.data_hora_inicio) : dayjs().hour(9).minute(0),
-      servicos: [],
-      observacoes: agendamento?.observacoes || '',
+      id_cliente: '',
+      id_servico: '',
+      id_profissional: '',
+      data_agendamento: format(new Date(), 'yyyy-MM-dd'),
+      hora_inicio: '09:00',
+      observacoes: ''
     },
+    mode: 'onChange'
   })
 
-  const watchedServicos = watch('servicos')
+  // Observar mudanças no formulário
+  const formData = watch()
 
-  // Calcular duração total e valor total dos serviços selecionados
-  const servicosSelecionados = servicosData.filter(s => watchedServicos?.includes(s.id || ''))
-  const duracaoTotal = servicosSelecionados.reduce((acc, s) => acc + (s.duracao_estimada_minutos || 0), 0)
-  const valorTotal = servicosSelecionados.reduce((acc, s) => acc + (s.preco || 0), 0)
-
-  const onSubmit = (data: AgendamentoFormData) => {
-    const dataFormatted = {
-      ...data,
-      data_hora_inicio: dayjs(data.data)
-        .hour(dayjs(data.hora_inicio).hour())
-        .minute(dayjs(data.hora_inicio).minute())
-        .toISOString(),
-      data_hora_fim: dayjs(data.data)
-        .hour(dayjs(data.hora_inicio).hour())
-        .minute(dayjs(data.hora_inicio).minute())
-        .add(duracaoTotal, 'minute')
-        .toISOString(),
+  // Carregar dados iniciais
+  useEffect(() => {
+    if (open) {
+      loadClientes()
+      loadServicos()
+      loadProfissionais()
     }
-    onSave(dataFormatted)
+  }, [open])
+
+  // Resetar form quando abrir/fechar
+  useEffect(() => {
+    if (open) {
+      setActiveStep(0)
+      if (agendamento) {
+        // Preencher formulário com dados do agendamento existente
+        reset({
+          id_cliente: agendamento.cliente.id || '',
+          id_servico: agendamento.servico.id || '',
+          id_profissional: agendamento.profissional.id || '',
+          data_agendamento: agendamento.data_agendamento,
+          hora_inicio: agendamento.hora_inicio,
+          observacoes: agendamento.observacoes || ''
+        })
+        
+        // Definir seleções para os autocompletes
+        setSelectedCliente({
+          id: agendamento.cliente.id || '',
+          nome: agendamento.cliente.nome,
+          telefone: agendamento.cliente.telefone || '',
+          email: agendamento.cliente.email || ''
+        } as Cliente)
+        
+        if (agendamento.servico.id) {
+          setSelectedServico({
+            id: agendamento.servico.id,
+            nome: agendamento.servico.nome,
+            preco: agendamento.servico.preco || 0,
+            duracao_estimada_minutos: agendamento.servico.duracao || 60
+          } as Servico)
+        }
+        
+        setSelectedProfissional({
+          id: agendamento.profissional.id,
+          usuario: {
+            nome_completo: agendamento.profissional.nome
+          }
+        } as ProfissionalComUsuario)
+      } else {
+        reset({
+          id_cliente: '',
+          id_servico: '',
+          id_profissional: '',
+          data_agendamento: format(new Date(), 'yyyy-MM-dd'),
+          hora_inicio: '09:00',
+          observacoes: ''
+        })
+        setSelectedCliente(null)
+        setSelectedServico(null)
+        setSelectedProfissional(null)
+      }
+    }
+  }, [open, agendamento, reset])
+
+  const loadClientes = async () => {
+    try {
+      const response = await clientesService.getAll({ page: 1, limit: 100 })
+      if (response.data) {
+        setClientes(response.data.data)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar clientes:', error)
+    }
+  }
+
+  const loadServicos = async () => {
+    try {
+      const response = await servicosService.getAll({ page: 1, limit: 100 })
+      if (response.data) {
+        setServicos(response.data.data)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar serviços:', error)
+    }
+  }
+
+  const loadProfissionais = async () => {
+    try {
+      const response = await profissionaisService.getAll({ page: 1, limit: 100 })
+      if (response.data) {
+        setProfissionais(response.data.data)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar profissionais:', error)
+    }
+  }
+
+  const onSubmit = async (data: AgendamentoFormData) => {
+    try {
+      // Converter para formato do AgendamentoAdapter
+      const formData: AdapterFormData = {
+        id_cliente: data.id_cliente,
+        id_servico: data.id_servico,
+        id_profissional: data.id_profissional,
+        data_agendamento: data.data_agendamento,
+        hora_inicio: data.hora_inicio,
+        observacoes: data.observacoes
+      }
+      
+      await onSave(formData)
+    } catch (error) {
+      console.error('Erro ao salvar agendamento:', error)
+    }
   }
 
   const handleClose = () => {
     reset()
-    setSelectedServicos([])
+    setActiveStep(0)
+    setSelectedCliente(null)
+    setSelectedServico(null)
+    setSelectedProfissional(null)
     onClose()
   }
 
-  const formatTime = (minutes: number) => {
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    if (hours > 0) {
-      return `${hours}h ${mins > 0 ? `${mins}min` : ''}`
+  const handleNext = async () => {
+    const fieldsToValidate = getFieldsForStep(activeStep)
+    const isStepValid = await trigger(fieldsToValidate)
+    
+    if (isStepValid && canProceedToNext()) {
+      setActiveStep((prevActiveStep) => prevActiveStep + 1)
     }
-    return `${mins}min`
   }
 
-  React.useEffect(() => {
-    if (open && agendamento) {
-      reset({
-        id_cliente: agendamento.id_cliente || '',
-        id_profissional: agendamento.id_profissional || '',
-        data: agendamento.data_hora_inicio ? dayjs(agendamento.data_hora_inicio) : dayjs(),
-        hora_inicio: agendamento.data_hora_inicio ? dayjs(agendamento.data_hora_inicio) : dayjs().hour(9).minute(0),
-        servicos: [],
-        observacoes: agendamento.observacoes || '',
-      })
+  const handleBack = () => {
+    setActiveStep((prevActiveStep) => prevActiveStep - 1)
+  }
+
+  const getFieldsForStep = (step: number): (keyof AgendamentoFormData)[] => {
+    switch (step) {
+      case 0: return ['id_cliente']
+      case 1: return ['id_servico']
+      case 2: return ['id_profissional']
+      case 3: return ['data_agendamento', 'hora_inicio']
+      case 4: return [] // Confirmação
+      default: return []
     }
-  }, [open, agendamento, reset])
+  }
 
-  return (
-    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="pt-br">
-      <Dialog 
-        open={open} 
-        onClose={handleClose}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: { borderRadius: 2 }
-        }}
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <EventIcon color="primary" />
-              <Typography variant="h6" fontWeight="bold">
-                {isEditing ? 'Editar Agendamento' : 'Novo Agendamento'}
-              </Typography>
-            </Box>
-            <IconButton onClick={handleClose} size="small">
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        </DialogTitle>
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value)
+  }
 
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <DialogContent>
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
+  // Obter duração do serviço selecionado
+  const getServiceDuration = () => {
+    return selectedServico?.duracao_estimada_minutos || 60
+  }
 
-            <Grid container spacing={3}>
-              {/* Cliente */}
-              <Grid item xs={12} md={6}>
-                <Controller
-                  name="id_cliente"
-                  control={control}
-                  render={({ field }) => (
-                    <Autocomplete
-                      {...field}
-                      options={clientesData}
-                      getOptionLabel={(option) => typeof option === 'string' ? 
-                        clientesData.find(c => c.id === option)?.nome || '' : 
-                        option.nome
-                      }
-                      value={clientesData.find(c => c.id === field.value) || null}
-                      onChange={(_, newValue) => {
-                        field.onChange(newValue?.id || '')
-                      }}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Cliente *"
-                          error={!!errors.id_cliente}
-                          helperText={errors.id_cliente?.message}
-                          disabled={loading}
-                        />
-                      )}
-                      renderOption={(props, option) => (
-                        <Box component="li" {...props}>
-                          <Box>
-                            <Typography variant="body1">{option.nome}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {option.telefone}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      )}
+  const renderStepContent = (step: number) => {
+    switch (step) {
+      case 0: // Cliente
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PersonIcon color="primary" />
+              Selecionar Cliente
+            </Typography>
+            
+            <Controller
+              name="id_cliente"
+              control={control}
+              render={({ field, fieldState }) => (
+                <Autocomplete
+                  {...field}
+                  options={clientes}
+                  getOptionLabel={(option) => option.nome}
+                  value={selectedCliente}
+                  onChange={(_, newValue) => {
+                    setSelectedCliente(newValue)
+                    setValue('id_cliente', newValue?.id || '')
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Cliente"
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
+                      fullWidth
                     />
                   )}
-                />
-              </Grid>
-
-              {/* Profissional */}
-              <Grid item xs={12} md={6}>
-                <Controller
-                  name="id_profissional"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControl fullWidth error={!!errors.id_profissional}>
-                      <InputLabel>Profissional *</InputLabel>
-                      <Select
-                        {...field}
-                        label="Profissional *"
-                        disabled={loading}
-                      >
-                        {profissionaisData.map((profissional) => (
-                          <MenuItem key={profissional.id} value={profissional.id}>
-                            <Box>
-                              <Typography variant="body1">{profissional.nome}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {profissional.especialidades.join(', ')}
-                              </Typography>
-                            </Box>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {errors.id_profissional && (
-                        <Typography variant="caption" color="error" sx={{ mt: 0.5, mx: 1.75 }}>
-                          {String(errors.id_profissional.message || 'Erro de validação')}
+                  renderOption={(props, option) => (
+                    <Box component="li" {...props}>
+                      <Box>
+                        <Typography variant="subtitle1">{option.nome}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {option.telefone} • {option.email}
                         </Typography>
-                      )}
-                    </FormControl>
+                      </Box>
+                    </Box>
                   )}
                 />
-              </Grid>
+              )}
+            />
 
-              {/* Data */}
+            {selectedCliente && (
+              <Card sx={{ mt: 2 }} variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Cliente Selecionado
+                  </Typography>
+                  <Typography variant="body1" fontWeight="medium">{selectedCliente.nome}</Typography>
+                  <Typography variant="body2" color="text.secondary">{selectedCliente.telefone}</Typography>
+                  <Typography variant="body2" color="text.secondary">{selectedCliente.email}</Typography>
+                </CardContent>
+              </Card>
+            )}
+          </Box>
+        )
+
+      case 1: // Serviço
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ServiceIcon color="primary" />
+              Selecionar Serviço
+            </Typography>
+            
+            <Controller
+              name="id_servico"
+              control={control}
+              render={({ field, fieldState }) => (
+                <Autocomplete
+                  {...field}
+                  options={servicos}
+                  getOptionLabel={(option) => option.nome}
+                  value={selectedServico}
+                  onChange={(_, newValue) => {
+                    setSelectedServico(newValue)
+                    setValue('id_servico', newValue?.id || '')
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Serviço"
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
+                      fullWidth
+                    />
+                  )}
+                  renderOption={(props, option) => (
+                    <Box component="li" {...props}>
+                      <Box sx={{ width: '100%' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="subtitle1">{option.nome}</Typography>
+                          <Typography variant="subtitle2" color="primary" fontWeight="bold">
+                            {formatCurrency(option.preco)}
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          Duração: {option.duracao_estimada_minutos} min
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+                />
+              )}
+            />
+
+            {selectedServico && (
+              <Card sx={{ mt: 2 }} variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Serviço Selecionado
+                  </Typography>
+                  <Typography variant="body1" fontWeight="medium">{selectedServico.nome}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Duração: {selectedServico.duracao_estimada_minutos} minutos
+                  </Typography>
+                  <Typography variant="h6" color="primary" fontWeight="bold">
+                    {formatCurrency(selectedServico.preco)}
+                  </Typography>
+                </CardContent>
+              </Card>
+            )}
+          </Box>
+        )
+
+      case 2: // Profissional
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PersonIcon color="primary" />
+              Selecionar Profissional
+            </Typography>
+            
+            <Controller
+              name="id_profissional"
+              control={control}
+              render={({ field, fieldState }) => (
+                <Autocomplete
+                  {...field}
+                  options={profissionais}
+                  getOptionLabel={(option) => option.usuario.nome_completo}
+                  value={selectedProfissional}
+                  onChange={(_, newValue) => {
+                    setSelectedProfissional(newValue)
+                    setValue('id_profissional', newValue?.id || '')
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Profissional"
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
+                      fullWidth
+                    />
+                  )}
+                  renderOption={(props, option) => (
+                    <Box component="li" {...props}>
+                      <Box>
+                        <Typography variant="subtitle1">{option.usuario.nome_completo}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {option.especialidades?.join(', ') || 'Especialidades não informadas'}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+                />
+              )}
+            />
+
+            {selectedProfissional && (
+              <Card sx={{ mt: 2 }} variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Profissional Selecionado
+                  </Typography>
+                  <Typography variant="body1" fontWeight="medium">
+                    {selectedProfissional.usuario.nome_completo}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {selectedProfissional.especialidades?.join(', ') || 'Especialidades não informadas'}
+                  </Typography>
+                </CardContent>
+              </Card>
+            )}
+          </Box>
+        )
+
+      case 3: // Data e Hora
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ScheduleIcon color="primary" />
+              Data e Horário
+            </Typography>
+            
+            <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
                 <Controller
-                  name="data"
+                  name="data_agendamento"
                   control={control}
-                  render={({ field }) => (
-                    <DatePicker
+                  render={({ field, fieldState }) => (
+                    <TextField
                       {...field}
-                      label="Data *"
-                      minDate={dayjs()}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          error: !!errors.data,
-                          helperText: errors.data?.message as string,
-                          disabled: loading,
-                        }
+                      type="date"
+                      label="Data do Agendamento"
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
+                      fullWidth
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                      inputProps={{
+                        min: format(new Date(), 'yyyy-MM-dd'), // Não permitir datas passadas
                       }}
                     />
                   )}
                 />
               </Grid>
-
-              {/* Horário */}
+              
               <Grid item xs={12} md={6}>
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Modo de Seleção de Horário
+                  </Typography>
+                  <ToggleButtonGroup
+                    value={timeSelectionMode}
+                    exclusive
+                    onChange={(_, newMode) => newMode && setTimeSelectionMode(newMode)}
+                    size="small"
+                    fullWidth
+                  >
+                    <ToggleButton value="picker">
+                      <CalendarIcon sx={{ mr: 1 }} />
+                      Seletor Visual
+                    </ToggleButton>
+                    <ToggleButton value="manual">
+                      <TimeIcon sx={{ mr: 1 }} />
+                      Manual
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Seleção de horário */}
+            <Box sx={{ mt: 3 }}>
+              {timeSelectionMode === 'manual' ? (
                 <Controller
                   name="hora_inicio"
                   control={control}
-                  render={({ field }) => (
-                    <TimePicker
-                      {...field}
-                      label="Horário de Início *"
-                      ampm={false}
-                      views={['hours', 'minutes']}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          error: !!errors.hora_inicio,
-                          helperText: errors.hora_inicio?.message as string,
-                          disabled: loading,
-                        }
-                      }}
-                    />
-                  )}
-                />
-              </Grid>
-
-              {/* Serviços */}
-              <Grid item xs={12}>
-                <Controller
-                  name="servicos"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControl fullWidth error={!!errors.servicos}>
-                      <InputLabel>Serviços *</InputLabel>
-                      <Select
-                        {...field}
-                        multiple
-                        label="Serviços *"
-                        value={field.value || []}
-                        onChange={(e) => {
-                          const value = e.target.value as string[]
-                          field.onChange(value)
-                          setSelectedServicos(value)
-                        }}
-                        renderValue={(selected) => (
-                          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-                            {(selected as string[]).map((value) => {
-                              const servico = servicosData.find(s => s.id === value)
-                              return (
-                                <Chip
-                                  key={value}
-                                  label={servico?.nome}
-                                  size="small"
-                                  color="primary"
-                                />
-                              )
-                            })}
-                          </Stack>
-                        )}
-                        disabled={loading}
-                      >
-                        {servicosData.map((servico) => (
-                          <MenuItem key={servico.id} value={servico.id}>
-                            <Box sx={{ width: '100%' }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Typography variant="body1">{servico.nome}</Typography>
-                                <Typography variant="body2" color="primary" fontWeight="bold">
-                                  R$ {servico.preco?.toFixed(2).replace('.', ',')}
-                                </Typography>
-                              </Box>
-                              <Typography variant="caption" color="text.secondary">
-                                Duração: {formatTime(servico.duracao_estimada_minutos || 0)}
-                              </Typography>
-                            </Box>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {errors.servicos && (
-                        <Typography variant="caption" color="error" sx={{ mt: 0.5, mx: 1.75 }}>
-                          {String(errors.servicos.message || 'Erro de validação')}
-                        </Typography>
-                      )}
-                    </FormControl>
-                  )}
-                />
-              </Grid>
-
-              {/* Resumo dos serviços selecionados */}
-              {servicosSelecionados.length > 0 && (
-                <Grid item xs={12}>
-                  <Box sx={{ 
-                    p: 2, 
-                    bgcolor: 'primary.50', 
-                    borderRadius: 1,
-                    border: '1px solid',
-                    borderColor: 'primary.200'
-                  }}>
-                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                      Resumo do Agendamento
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <TimeIcon fontSize="small" color="primary" />
-                        <Typography variant="body2">
-                          Duração total: {formatTime(duracaoTotal)}
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" fontWeight="bold" color="primary">
-                        Total: R$ {valorTotal.toFixed(2).replace('.', ',')}
-                      </Typography>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary">
-                      Horário previsto de término: {
-                        watch('hora_inicio') ? 
-                        dayjs(watch('hora_inicio')).add(duracaoTotal, 'minute').format('HH:mm') :
-                        '--:--'
-                      }
-                    </Typography>
-                  </Box>
-                </Grid>
-              )}
-
-              {/* Observações */}
-              <Grid item xs={12}>
-                <Controller
-                  name="observacoes"
-                  control={control}
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <TextField
                       {...field}
-                      label="Observações"
-                      multiline
-                      rows={3}
+                      type="time"
+                      label="Horário de Início"
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
                       fullWidth
-                      error={!!errors.observacoes}
-                      helperText={errors.observacoes?.message as string || 'Informações adicionais sobre o agendamento'}
-                      disabled={loading}
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                      sx={{ maxWidth: 200 }}
                     />
                   )}
                 />
-              </Grid>
-            </Grid>
-          </DialogContent>
+              ) : (
+                formData.data_agendamento && selectedProfissional ? (
+                  <TimeSlotPicker
+                    selectedDate={formData.data_agendamento}
+                    selectedProfissional={{
+                      id: selectedProfissional.id,
+                      nome: selectedProfissional.usuario.nome_completo
+                    }}
+                    servicoDuracao={getServiceDuration()}
+                    onTimeSelect={(time) => setValue('hora_inicio', time)}
+                    selectedTime={formData.hora_inicio}
+                    agendamentoId={agendamento?.id}
+                  />
+                ) : (
+                  <Alert severity="info">
+                    Selecione uma data e profissional para ver os horários disponíveis
+                  </Alert>
+                )
+              )}
+            </Box>
 
-          <DialogActions sx={{ p: 3, pt: 2 }}>
-            <Button 
-              onClick={handleClose}
+            {/* Verificação de conflitos em tempo real */}
+            {formData.data_agendamento && formData.hora_inicio && selectedProfissional && (
+              <ConflictChecker
+                novoAgendamento={{
+                  profissional_id: selectedProfissional.id,
+                  profissional_nome: selectedProfissional.usuario.nome_completo,
+                  data_agendamento: formData.data_agendamento,
+                  hora_inicio: formData.hora_inicio,
+                  duracao_minutos: getServiceDuration(),
+                  servico: selectedServico?.nome,
+                  agendamento_id: agendamento?.id
+                }}
+                realTimeCheck={true}
+                onConflictCheck={(result) => setConflictCheckResult(result)}
+              />
+            )}
+
+            <Controller
+              name="observacoes"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Observações (opcional)"
+                  multiline
+                  rows={3}
+                  fullWidth
+                  sx={{ mt: 2 }}
+                  placeholder="Informações adicionais sobre o agendamento..."
+                />
+              )}
+            />
+          </Box>
+        )
+
+      case 4: // Confirmação
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <EventIcon color="primary" />
+              Confirmar Agendamento
+            </Typography>
+            
+            <Alert severity="info" sx={{ mb: 3 }}>
+              Verifique os dados antes de confirmar o agendamento.
+            </Alert>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                      Cliente
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {selectedCliente?.nome}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedCliente?.telefone}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                      Profissional
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {selectedProfissional?.usuario.nome_completo}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                      Serviço
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium" gutterBottom>
+                      {selectedServico?.nome}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Duração: {selectedServico?.duracao_estimada_minutos} min
+                      </Typography>
+                      <Typography variant="h6" color="primary" fontWeight="bold">
+                        {selectedServico && formatCurrency(selectedServico.preco)}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                      Data
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {formData.data_agendamento && format(new Date(formData.data_agendamento), 'dd/MM/yyyy', { locale: ptBR })}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                      Horário
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {formData.hora_inicio}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {formData.observacoes && (
+                <Grid item xs={12}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Observações
+                      </Typography>
+                      <Typography variant="body2">
+                        {formData.observacoes}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+            </Grid>
+          </Box>
+        )
+
+      default:
+        return <Typography>Passo desconhecido</Typography>
+    }
+  }
+
+  // Verificar se pode avançar para próximo step
+  const canProceedToNext = () => {
+    // No step 3 (data/hora), verificar se não há conflitos
+    if (activeStep === 3 && conflictCheckResult?.hasConflicts) {
+      return false
+    }
+    return true
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{
+        sx: { minHeight: '70vh' }
+      }}
+    >
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h5" fontWeight="bold">
+            {isEditing ? 'Editar Agendamento' : 'Novo Agendamento'}
+          </Typography>
+          <IconButton onClick={handleClose} disabled={loading}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent dividers>
+          <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+            {steps.map((label) => (
+              <Step key={label}>
+                <StepLabel>{label}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
+
+          {renderStepContent(activeStep)}
+
+          {Object.keys(errors).length > 0 && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              Por favor, preencha todos os campos obrigatórios.
+            </Alert>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 3, pt: 1 }}>
+          <Button 
+            onClick={handleClose} 
+            disabled={loading}
+            variant="outlined"
+          >
+            Cancelar
+          </Button>
+          
+          <Box sx={{ flex: 1 }} />
+
+          {activeStep > 0 && (
+            <Button
+              onClick={handleBack}
               disabled={loading}
-              variant="outlined"
+              startIcon={<BackIcon />}
+              sx={{ mr: 1 }}
             >
-              Cancelar
+              Voltar
             </Button>
+          )}
+
+          {activeStep < steps.length - 1 ? (
+            <Button
+              onClick={handleNext}
+              disabled={loading}
+              variant="contained"
+              endIcon={<NextIcon />}
+            >
+              Próximo
+            </Button>
+          ) : (
             <Button
               type="submit"
               variant="contained"
-              disabled={loading || isSubmitting || servicosSelecionados.length === 0}
-              startIcon={<SaveIcon />}
-              sx={{ minWidth: 120 }}
+              disabled={loading || !isValid}
+              startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
             >
-              {loading ? 'Salvando...' : isEditing ? 'Atualizar' : 'Agendar'}
+              {loading ? 'Salvando...' : (isEditing ? 'Atualizar' : 'Criar Agendamento')}
             </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
-    </LocalizationProvider>
+          )}
+        </DialogActions>
+      </form>
+    </Dialog>
   )
 } 

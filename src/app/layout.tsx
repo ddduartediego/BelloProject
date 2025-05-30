@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider } from '@/contexts/AuthContext';
-import theme from '@/lib/theme';
+import ThemeRegistry from '@/lib/registry';
 import "./globals.css";
 
 const inter = Inter({
@@ -31,12 +29,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={inter.className}>
-        <ThemeProvider theme={theme}>
-          <CssBaseline />
+        <ThemeRegistry>
           <AuthProvider>
             {children}
           </AuthProvider>
-        </ThemeProvider>
+        </ThemeRegistry>
       </body>
     </html>
   );

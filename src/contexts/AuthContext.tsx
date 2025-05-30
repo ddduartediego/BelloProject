@@ -127,16 +127,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Monitorar mudanças no estado de autenticação
   useEffect(() => {
-    // Pegar sessão inicial
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-    })
+    let mounted = true
+
+    const initializeAuth = async () => {
+      try {
+        // Pegar sessão inicial
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (!mounted) return
+
+        setSession(session)
+        setUser(session?.user ?? null)
+        
+        if (!session) {
+          setLoading(false)
+        }
+      } catch (error) {
+        console.error('Erro ao inicializar autenticação:', error)
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    initializeAuth()
 
     // Escutar mudanças na autenticação
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+
+      console.log('Auth state change:', event, session?.user?.email)
+      
       setSession(session)
       setUser(session?.user ?? null)
       
@@ -145,22 +168,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [supabase.auth])
 
   // Buscar dados do usuário quando user muda
   useEffect(() => {
     if (user) {
       fetchUsuario()
+    } else {
+      setUsuario(null)
     }
   }, [user, fetchUsuario])
 
   // Marcar loading como false após verificações iniciais
   useEffect(() => {
-    if (user !== null || session === null) {
-      setLoading(false)
-    }
-  }, [user, session])
+    const timer = setTimeout(() => {
+      if (user === null || (user && (usuario !== null || usuario === null))) {
+        setLoading(false)
+      }
+    }, 1000) // Aguarda 1 segundo para processos de inicialização
+
+    return () => clearTimeout(timer)
+  }, [user, usuario])
 
   const value: AuthContextType = {
     user,

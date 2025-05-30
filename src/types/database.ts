@@ -189,7 +189,7 @@ export interface CreateClienteRequest {
 // Tipos com relacionamentos para exibição
 export interface AgendamentoComDetalhes extends Agendamento {
   cliente: Cliente
-  profissional: Profissional
+  profissional: Profissional & { usuario: Usuario }
   servicos: (AgendamentoServico & { servico: Servico })[]
 }
 

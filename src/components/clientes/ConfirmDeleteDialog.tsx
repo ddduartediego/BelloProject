@@ -37,7 +37,7 @@ export default function ConfirmDeleteDialog({
   const getInitials = (nome: string) => {
     return nome
       .split(' ')
-      .map(word => word[0])
+      .map(word => word.charAt(0))
       .join('')
       .substring(0, 2)
       .toUpperCase()

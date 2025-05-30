@@ -13,6 +13,7 @@ import {
   Typography,
   IconButton,
   Alert,
+  CircularProgress,
 } from '@mui/material'
 import {
   Close as CloseIcon,
@@ -34,7 +35,8 @@ const clienteSchema = z.object({
   telefone: z
     .string()
     .min(1, 'Telefone é obrigatório')
-    .regex(/^\(\d{2}\)\s\d{4,5}-\d{4}$/, 'Telefone deve estar no formato (11) 99999-9999'),
+    .min(10, 'Telefone deve ter pelo menos 10 dígitos')
+    .max(15, 'Telefone inválido'),
   email: z
     .string()
     .email('Email deve ter um formato válido')
@@ -48,7 +50,7 @@ const clienteSchema = z.object({
     .string()
     .max(1000, 'Observações devem ter no máximo 1000 caracteres')
     .optional()
-    .or(z.literal('')),
+    .or(z.literal(''))
 })
 
 type ClienteFormData = z.infer<typeof clienteSchema>
@@ -56,10 +58,9 @@ type ClienteFormData = z.infer<typeof clienteSchema>
 interface ClienteFormProps {
   open: boolean
   onClose: () => void
-  onSave: (cliente: ClienteFormData) => void
-  cliente?: Partial<Cliente>
+  onSave: (data: ClienteFormData) => Promise<void>
+  cliente?: Cliente
   loading?: boolean
-  error?: string | null
 }
 
 export default function ClienteForm({
@@ -67,51 +68,95 @@ export default function ClienteForm({
   onClose,
   onSave,
   cliente,
-  loading = false,
-  error = null
+  loading = false
 }: ClienteFormProps) {
-  const isEditing = !!cliente?.id
+  const isEditing = Boolean(cliente)
 
   const {
     control,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isValid },
   } = useForm<ClienteFormData>({
     resolver: zodResolver(clienteSchema),
     defaultValues: {
-      nome: cliente?.nome || '',
-      telefone: cliente?.telefone || '',
-      email: cliente?.email || '',
-      data_nascimento: cliente?.data_nascimento || '',
-      observacoes: cliente?.observacoes || '',
+      nome: '',
+      telefone: '',
+      email: '',
+      data_nascimento: '',
+      observacoes: ''
     },
+    mode: 'onChange'
   })
 
-  // Função para formatar telefone automaticamente
-  const formatTelefone = (value: string) => {
-    const numbers = value.replace(/\D/g, '')
-    if (numbers.length <= 11) {
-      return numbers
-        .replace(/(\d{2})(\d)/, '($1) $2')
-        .replace(/(\d{4,5})(\d{4})$/, '$1-$2')
+  // Resetar form quando abrir/fechar ou mudar cliente
+  React.useEffect(() => {
+    if (open) {
+      if (cliente) {
+        // Converter formato da data para exibição
+        const dataNascimento = cliente.data_nascimento
+          ? new Date(cliente.data_nascimento).toLocaleDateString('pt-BR')
+          : ''
+
+        reset({
+          nome: cliente.nome || '',
+          telefone: cliente.telefone || '',
+          email: cliente.email || '',
+          data_nascimento: dataNascimento,
+          observacoes: cliente.observacoes || ''
+        })
+      } else {
+        reset({
+          nome: '',
+          telefone: '',
+          email: '',
+          data_nascimento: '',
+          observacoes: ''
+        })
+      }
+    }
+  }, [open, cliente, reset])
+
+  // Função para formatar telefone
+  const formatPhone = (value: string) => {
+    const cleaned = value.replace(/\D/g, '')
+    if (cleaned.length <= 11) {
+      if (cleaned.length <= 10) {
+        return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
+      } else {
+        return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+      }
     }
     return value
   }
 
   // Função para formatar data
-  const formatData = (value: string) => {
-    const numbers = value.replace(/\D/g, '')
-    if (numbers.length <= 8) {
-      return numbers
+  const formatDate = (value: string) => {
+    const cleaned = value.replace(/\D/g, '')
+    if (cleaned.length <= 8) {
+      return cleaned
         .replace(/(\d{2})(\d)/, '$1/$2')
         .replace(/(\d{2})(\d)/, '$1/$2')
     }
     return value
   }
 
-  const onSubmit = (data: ClienteFormData) => {
-    onSave(data)
+  const onSubmit = async (data: ClienteFormData) => {
+    try {
+      // Converter data de volta para formato ISO se fornecida
+      let dataFormatada = data
+      if (data.data_nascimento && data.data_nascimento.includes('/')) {
+        const [dia, mes, ano] = data.data_nascimento.split('/')
+        if (dia && mes && ano && ano.length === 4) {
+          const dataISO = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`
+          dataFormatada = { ...data, data_nascimento: dataISO }
+        }
+      }
+
+      await onSave(dataFormatada)
+    } catch (error) {
+      console.error('Erro ao salvar cliente:', error)
+    }
   }
 
   const handleClose = () => {
@@ -119,37 +164,17 @@ export default function ClienteForm({
     onClose()
   }
 
-  React.useEffect(() => {
-    if (open && cliente) {
-      reset({
-        nome: cliente.nome || '',
-        telefone: cliente.telefone || '',
-        email: cliente.email || '',
-        data_nascimento: cliente.data_nascimento || '',
-        observacoes: cliente.observacoes || '',
-      })
-    }
-  }, [open, cliente, reset])
-
   return (
-    <Dialog 
-      open={open} 
-      onClose={handleClose}
-      maxWidth="md"
-      fullWidth
-      PaperProps={{
-        sx: { borderRadius: 2 }
-      }}
-    >
+    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <PersonIcon color="primary" />
             <Typography variant="h6" fontWeight="bold">
               {isEditing ? 'Editar Cliente' : 'Novo Cliente'}
             </Typography>
           </Box>
-          <IconButton onClick={handleClose} size="small">
+          <IconButton onClick={handleClose} disabled={loading}>
             <CloseIcon />
           </IconButton>
         </Box>
@@ -157,26 +182,22 @@ export default function ClienteForm({
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
-
           <Grid container spacing={3}>
             {/* Nome */}
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12}>
               <Controller
                 name="nome"
                 control={control}
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Nome Completo *"
+                    label="Nome Completo"
                     fullWidth
+                    required
                     error={!!errors.nome}
                     helperText={errors.nome?.message}
                     disabled={loading}
+                    autoFocus
                   />
                 )}
               />
@@ -190,13 +211,14 @@ export default function ClienteForm({
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Telefone *"
+                    label="Telefone"
                     fullWidth
+                    required
                     error={!!errors.telefone}
                     helperText={errors.telefone?.message || 'Ex: (11) 99999-9999'}
                     disabled={loading}
                     onChange={(e) => {
-                      const formatted = formatTelefone(e.target.value)
+                      const formatted = formatPhone(e.target.value)
                       field.onChange(formatted)
                     }}
                     inputProps={{
@@ -226,7 +248,7 @@ export default function ClienteForm({
               />
             </Grid>
 
-            {/* Data de nascimento */}
+            {/* Data de Nascimento */}
             <Grid item xs={12} md={6}>
               <Controller
                 name="data_nascimento"
@@ -237,10 +259,10 @@ export default function ClienteForm({
                     label="Data de Nascimento"
                     fullWidth
                     error={!!errors.data_nascimento}
-                    helperText={errors.data_nascimento?.message || 'Ex: 15/03/1990'}
+                    helperText={errors.data_nascimento?.message || 'Formato: DD/MM/AAAA'}
                     disabled={loading}
                     onChange={(e) => {
-                      const formatted = formatData(e.target.value)
+                      const formatted = formatDate(e.target.value)
                       field.onChange(formatted)
                     }}
                     inputProps={{
@@ -260,22 +282,30 @@ export default function ClienteForm({
                   <TextField
                     {...field}
                     label="Observações"
-                    multiline
-                    rows={4}
                     fullWidth
+                    multiline
+                    rows={3}
                     error={!!errors.observacoes}
-                    helperText={errors.observacoes?.message || 'Informações adicionais sobre o cliente'}
+                    helperText={errors.observacoes?.message}
                     disabled={loading}
+                    placeholder="Informações adicionais sobre o cliente..."
                   />
                 )}
               />
             </Grid>
           </Grid>
+
+          {/* Alert de validação */}
+          {Object.keys(errors).length > 0 && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              Por favor, corrija os erros antes de continuar.
+            </Alert>
+          )}
         </DialogContent>
 
-        <DialogActions sx={{ p: 3, pt: 2 }}>
+        <DialogActions sx={{ p: 3, pt: 1 }}>
           <Button 
-            onClick={handleClose}
+            onClick={handleClose} 
             disabled={loading}
             variant="outlined"
           >
@@ -284,11 +314,10 @@ export default function ClienteForm({
           <Button
             type="submit"
             variant="contained"
-            disabled={loading || isSubmitting}
-            startIcon={<SaveIcon />}
-            sx={{ minWidth: 120 }}
+            disabled={loading || !isValid}
+            startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
           >
-            {loading ? 'Salvando...' : isEditing ? 'Atualizar' : 'Salvar'}
+            {loading ? 'Salvando...' : (isEditing ? 'Atualizar' : 'Salvar')}
           </Button>
         </DialogActions>
       </form>
