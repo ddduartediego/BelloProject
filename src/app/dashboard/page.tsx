@@ -28,19 +28,44 @@ export default function DashboardPage() {
   const router = useRouter()
   const { user, usuario, isAuthenticated, loading } = useAuth()
 
+  // DEBUG: Log dos estados da página dashboard
   useEffect(() => {
+    console.log('[DEBUG DashboardPage] Estados atualizados:', {
+      user: user?.id || 'null',
+      usuario: usuario?.id || 'null',
+      isAuthenticated: isAuthenticated(),
+      loading,
+      currentUrl: window.location.href
+    })
+  }, [user, usuario, isAuthenticated, loading])
+
+  // Verificar autenticação e redirecionar se necessário
+  useEffect(() => {
+    console.log('[DEBUG DashboardPage] Verificando autenticação')
+    console.log('[DEBUG DashboardPage] loading:', loading, 'isAuthenticated:', isAuthenticated())
+    
     if (!loading && !isAuthenticated()) {
+      console.log('[DEBUG DashboardPage] Usuário não autenticado, redirecionando para login')
       router.push('/login')
+    } else if (!loading && isAuthenticated()) {
+      console.log('[DEBUG DashboardPage] Usuário autenticado, permanecendo no dashboard')
     }
   }, [loading, isAuthenticated, router])
 
+  // DEBUG: Log durante renderização
+  console.log('[DEBUG DashboardPage] Renderizando - loading:', loading, 'isAuthenticated:', isAuthenticated())
+
   if (loading) {
+    console.log('[DEBUG DashboardPage] Mostrando LoadingScreen')
     return <LoadingScreen message="Carregando dashboard..." />
   }
 
   if (!isAuthenticated()) {
+    console.log('[DEBUG DashboardPage] Não autenticado, retornando null')
     return null
   }
+
+  console.log('[DEBUG DashboardPage] Renderizando dashboard completo')
 
   return (
     <Layout>

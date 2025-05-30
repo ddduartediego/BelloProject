@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -47,12 +47,35 @@ interface LoginFormProps {
 
 export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps) {
   const router = useRouter()
-  const { signIn, signInWithGoogle, loading: authLoading } = useAuth()
+  const { signIn, signInWithGoogle, loading: authLoading, user, session, isAuthenticated } = useAuth()
   
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // DEBUG: Log estados do LoginForm
+  useEffect(() => {
+    console.log('[DEBUG LoginForm] Estados atualizados:', {
+      user: user?.id || 'null',
+      session: session?.access_token ? 'exists' : 'null',
+      authLoading,
+      isAuthenticated: isAuthenticated(),
+      currentUrl: window.location.href
+    })
+  }, [user, session, authLoading, isAuthenticated])
+
+  // DEBUG: Verificar se usuário já está autenticado
+  useEffect(() => {
+    console.log('[DEBUG LoginForm] Verificando autenticação para redirecionamento')
+    
+    if (!authLoading && isAuthenticated()) {
+      console.log('[DEBUG LoginForm] Usuário autenticado, redirecionando para:', redirectTo)
+      router.push(redirectTo)
+    } else {
+      console.log('[DEBUG LoginForm] Usuário não autenticado ou ainda carregando')
+    }
+  }, [authLoading, isAuthenticated, router, redirectTo])
 
   const {
     register,
@@ -68,6 +91,7 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
 
   // Handler para login com email/senha
   const onSubmit = async (data: LoginFormData) => {
+    console.log('[DEBUG LoginForm] onSubmit iniciado para:', data.email)
     setIsLoading(true)
     setError(null)
 
@@ -75,11 +99,14 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
       const { error } = await signIn(data.email, data.password)
       
       if (error) {
+        console.log('[DEBUG LoginForm] Erro no login:', error)
         setError(error)
       } else {
-        router.push(redirectTo)
+        console.log('[DEBUG LoginForm] Login bem-sucedido, aguardando redirecionamento automático')
+        // Não fazemos router.push aqui, deixamos o useEffect handle
       }
-    } catch {
+    } catch (err) {
+      console.error('[DEBUG LoginForm] Erro inesperado:', err)
       setError('Erro inesperado durante o login')
     } finally {
       setIsLoading(false)
@@ -88,6 +115,7 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
 
   // Handler para login com Google
   const handleGoogleLogin = async () => {
+    console.log('[DEBUG LoginForm] handleGoogleLogin iniciado')
     setIsGoogleLoading(true)
     setError(null)
 
@@ -95,11 +123,15 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
       const { error } = await signInWithGoogle()
       
       if (error) {
+        console.log('[DEBUG LoginForm] Erro no Google login:', error)
         setError(error)
         setIsGoogleLoading(false)
+      } else {
+        console.log('[DEBUG LoginForm] Google login redirecionamento iniciado')
+        // Se sucesso, o redirecionamento será feito automaticamente pelo Supabase
       }
-      // Se sucesso, o redirecionamento será feito automaticamente pelo Supabase
-    } catch {
+    } catch (err) {
+      console.error('[DEBUG LoginForm] Erro inesperado no Google login:', err)
       setError('Erro inesperado durante o login com Google')
       setIsGoogleLoading(false)
     }
@@ -110,6 +142,24 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
   }
 
   const isFormLoading = isLoading || isSubmitting || authLoading
+
+  // DEBUG: Se ainda está carregando, mostrar isso
+  if (authLoading) {
+    console.log('[DEBUG LoginForm] Ainda carregando estado de auth')
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          bgcolor: 'grey.50',
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    )
+  }
 
   return (
     <Box
