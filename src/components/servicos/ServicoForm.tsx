@@ -13,16 +13,15 @@ import {
   Typography,
   IconButton,
   Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   InputAdornment,
+  CircularProgress,
 } from '@mui/material'
 import {
   Close as CloseIcon,
   Save as SaveIcon,
   ContentCut as ServiceIcon,
+  AttachMoney as MoneyIcon,
+  AccessTime as TimeIcon,
 } from '@mui/icons-material'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -42,17 +41,13 @@ const servicoSchema = z.object({
     .optional()
     .or(z.literal('')),
   preco: z
-    .string()
-    .min(1, 'Preço é obrigatório')
-    .regex(/^\d+([.,]\d{2})?$/, 'Preço deve estar no formato 00,00'),
-  duracao_minutos: z
-    .string()
-    .min(1, 'Duração é obrigatória')
-    .regex(/^\d+$/, 'Duração deve ser um número inteiro'),
-  categoria: z
-    .string()
-    .min(1, 'Categoria é obrigatória'),
-  ativo: z.boolean().default(true),
+    .number()
+    .min(0.01, 'Preço deve ser maior que zero')
+    .max(9999.99, 'Preço não pode ser maior que R$ 9.999,99'),
+  duracao_estimada_minutos: z
+    .number()
+    .min(5, 'Duração mínima é de 5 minutos')
+    .max(1440, 'Duração máxima é de 24 horas (1440 minutos)')
 })
 
 type ServicoFormData = z.infer<typeof servicoSchema>
@@ -60,77 +55,65 @@ type ServicoFormData = z.infer<typeof servicoSchema>
 interface ServicoFormProps {
   open: boolean
   onClose: () => void
-  onSave: (servico: ServicoFormData) => void
-  servico?: Partial<Servico>
+  onSave: (data: { nome: string; descricao?: string; duracao_estimada_minutos: number; preco: number }) => Promise<void>
+  servico?: Servico
   loading?: boolean
-  error?: string | null
 }
-
-// Categorias disponíveis
-const categorias = [
-  'Corte de Cabelo',
-  'Coloração',
-  'Tratamentos Capilares',
-  'Manicure e Pedicure',
-  'Depilação',
-  'Estética Facial',
-  'Massagem',
-  'Outros'
-]
 
 export default function ServicoForm({
   open,
   onClose,
   onSave,
   servico,
-  loading = false,
-  error = null
+  loading = false
 }: ServicoFormProps) {
-  const isEditing = !!servico?.id
+  const isEditing = Boolean(servico)
 
   const {
     control,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isValid },
+    setValue,
+    watch
   } = useForm<ServicoFormData>({
     resolver: zodResolver(servicoSchema),
     defaultValues: {
-      nome: servico?.nome || '',
-      descricao: servico?.descricao || '',
-      preco: servico?.preco ? servico.preco.toString().replace('.', ',') : '',
-      duracao_minutos: servico?.duracao_estimada_minutos?.toString() || '',
-      categoria: 'Corte de Cabelo',
-      ativo: true,
+      nome: '',
+      descricao: '',
+      preco: 0,
+      duracao_estimada_minutos: 30
     },
+    mode: 'onChange'
   })
 
-  // Função para formatar preço automaticamente
-  const formatPreco = (value: string) => {
-    const numbers = value.replace(/\D/g, '')
-    if (numbers.length <= 8) {
-      const formatted = numbers.padStart(3, '0')
-      const integer = formatted.slice(0, -2) || '0'
-      const decimal = formatted.slice(-2)
-      return `${integer.replace(/^0+/, '') || '0'},${decimal}`
+  // Resetar form quando abrir/fechar ou mudar serviço
+  React.useEffect(() => {
+    if (open) {
+      if (servico) {
+        reset({
+          nome: servico.nome || '',
+          descricao: servico.descricao || '',
+          preco: servico.preco || 0,
+          duracao_estimada_minutos: servico.duracao_estimada_minutos || 30
+        })
+      } else {
+        reset({
+          nome: '',
+          descricao: '',
+          preco: 0,
+          duracao_estimada_minutos: 30
+        })
+      }
     }
-    return value
-  }
+  }, [open, servico, reset])
 
-  // Função para formatar duração
-  const formatDuracao = (value: string) => {
-    return value.replace(/\D/g, '')
-  }
-
-  const onSubmit = (data: ServicoFormData) => {
-    // Converter preço de volta para decimal
-    const precoDecimal = data.preco.replace(',', '.')
-    const dataFormatted = {
-      ...data,
-      preco: precoDecimal,
-      duracao_minutos: data.duracao_minutos,
+  const onSubmit = async (data: ServicoFormData) => {
+    try {
+      await onSave(data)
+    } catch (error) {
+      console.error('Erro ao salvar serviço:', error)
     }
-    onSave(dataFormatted)
   }
 
   const handleClose = () => {
@@ -138,38 +121,56 @@ export default function ServicoForm({
     onClose()
   }
 
-  React.useEffect(() => {
-    if (open && servico) {
-      reset({
-        nome: servico.nome || '',
-        descricao: servico.descricao || '',
-        preco: servico.preco ? servico.preco.toString().replace('.', ',') : '',
-        duracao_minutos: servico.duracao_estimada_minutos?.toString() || '',
-        categoria: 'Corte de Cabelo',
-        ativo: true,
-      })
+  // Função para formatar preço durante digitação
+  const handlePrecoChange = (value: string, onChange: (value: number) => void) => {
+    // Remove tudo que não é número, vírgula ou ponto
+    const cleaned = value.replace(/[^\d.,]/g, '')
+    
+    // Converte vírgula para ponto
+    const withDot = cleaned.replace(',', '.')
+    
+    // Parse para número
+    const numericValue = parseFloat(withDot) || 0
+    
+    // Limita a 2 casas decimais
+    const roundedValue = Math.round(numericValue * 100) / 100
+    
+    onChange(roundedValue)
+  }
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value)
+  }
+
+  const formatDuration = (minutes: number) => {
+    if (minutes < 60) {
+      return `${minutes} min`
     }
-  }, [open, servico, reset])
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+    if (remainingMinutes === 0) {
+      return `${hours}h`
+    }
+    return `${hours}h ${remainingMinutes}min`
+  }
+
+  const watchedPreco = watch('preco')
+  const watchedDuracao = watch('duracao_estimada_minutos')
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={handleClose}
-      maxWidth="md"
-      fullWidth
-      PaperProps={{
-        sx: { borderRadius: 2 }
-      }}
-    >
+    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <ServiceIcon color="primary" />
             <Typography variant="h6" fontWeight="bold">
               {isEditing ? 'Editar Serviço' : 'Novo Serviço'}
             </Typography>
           </Box>
-          <IconButton onClick={handleClose} size="small">
+          <IconButton onClick={handleClose} disabled={loading}>
             <CloseIcon />
           </IconButton>
         </Box>
@@ -177,56 +178,24 @@ export default function ServicoForm({
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
-
           <Grid container spacing={3}>
-            {/* Nome */}
-            <Grid item xs={12} md={6}>
+            {/* Nome do Serviço */}
+            <Grid item xs={12}>
               <Controller
                 name="nome"
                 control={control}
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Nome do Serviço *"
+                    label="Nome do Serviço"
                     fullWidth
+                    required
                     error={!!errors.nome}
                     helperText={errors.nome?.message}
                     disabled={loading}
+                    autoFocus
+                    placeholder="Ex: Corte Feminino, Manicure, Coloração..."
                   />
-                )}
-              />
-            </Grid>
-
-            {/* Categoria */}
-            <Grid item xs={12} md={6}>
-              <Controller
-                name="categoria"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth error={!!errors.categoria}>
-                    <InputLabel>Categoria *</InputLabel>
-                    <Select
-                      {...field}
-                      label="Categoria *"
-                      disabled={loading}
-                    >
-                      {categorias.map((categoria) => (
-                        <MenuItem key={categoria} value={categoria}>
-                          {categoria}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {errors.categoria && (
-                      <Typography variant="caption" color="error" sx={{ mt: 0.5, mx: 1.75 }}>
-                        {errors.categoria.message}
-                      </Typography>
-                    )}
-                  </FormControl>
                 )}
               />
             </Grid>
@@ -238,22 +207,22 @@ export default function ServicoForm({
                 control={control}
                 render={({ field }) => (
                   <TextField
-                    {...field}
-                    label="Preço *"
+                    label="Preço"
                     fullWidth
+                    required
                     error={!!errors.preco}
-                    helperText={errors.preco?.message || 'Ex: 50,00'}
+                    helperText={errors.preco?.message || `Formato: ${formatCurrency(watchedPreco || 0)}`}
                     disabled={loading}
+                    placeholder="0,00"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <MoneyIcon />
+                        </InputAdornment>
+                      ),
                     }}
-                    onChange={(e) => {
-                      const formatted = formatPreco(e.target.value)
-                      field.onChange(formatted)
-                    }}
-                    inputProps={{
-                      maxLength: 10
-                    }}
+                    value={field.value?.toString().replace('.', ',') || ''}
+                    onChange={(e) => handlePrecoChange(e.target.value, field.onChange)}
                   />
                 )}
               />
@@ -262,53 +231,35 @@ export default function ServicoForm({
             {/* Duração */}
             <Grid item xs={12} md={6}>
               <Controller
-                name="duracao_minutos"
+                name="duracao_estimada_minutos"
                 control={control}
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Duração (minutos) *"
+                    label="Duração (minutos)"
+                    type="number"
                     fullWidth
-                    error={!!errors.duracao_minutos}
-                    helperText={errors.duracao_minutos?.message || 'Ex: 60'}
+                    required
+                    error={!!errors.duracao_estimada_minutos}
+                    helperText={errors.duracao_estimada_minutos?.message || `Duração: ${formatDuration(watchedDuracao || 0)}`}
                     disabled={loading}
-                    onChange={(e) => {
-                      const formatted = formatDuracao(e.target.value)
-                      field.onChange(formatted)
-                    }}
                     inputProps={{
-                      maxLength: 4
+                      min: 5,
+                      max: 1440,
+                      step: 5
                     }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <TimeIcon />
+                        </InputAdornment>
+                      ),
+                    }}
+                    onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                   />
                 )}
               />
             </Grid>
-
-            {/* Status */}
-            <Grid item xs={12} md={6}>
-              <Controller
-                name="ativo"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth>
-                    <InputLabel>Status</InputLabel>
-                    <Select
-                      {...field}
-                      value={field.value ? 'true' : 'false'}
-                      onChange={(e) => field.onChange(e.target.value === 'true')}
-                      label="Status"
-                      disabled={loading}
-                    >
-                      <MenuItem value="true">Ativo</MenuItem>
-                      <MenuItem value="false">Inativo</MenuItem>
-                    </Select>
-                  </FormControl>
-                )}
-              />
-            </Grid>
-
-            {/* Espaço vazio para alinhar */}
-            <Grid item xs={12} md={6} />
 
             {/* Descrição */}
             <Grid item xs={12}>
@@ -318,23 +269,50 @@ export default function ServicoForm({
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Descrição"
-                    multiline
-                    rows={4}
+                    label="Descrição (opcional)"
                     fullWidth
+                    multiline
+                    rows={3}
                     error={!!errors.descricao}
-                    helperText={errors.descricao?.message || 'Descreva o serviço, técnicas utilizadas, benefícios, etc.'}
+                    helperText={errors.descricao?.message}
                     disabled={loading}
+                    placeholder="Descreva o serviço, incluindo o que está incluso, produtos utilizados, etc..."
                   />
                 )}
               />
             </Grid>
+
+            {/* Preview do serviço */}
+            {(watchedPreco > 0 || watchedDuracao > 0) && (
+              <Grid item xs={12}>
+                <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                    Preview do Serviço:
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <Typography variant="body2">
+                      <strong>Preço:</strong> {formatCurrency(watchedPreco || 0)}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Duração:</strong> {formatDuration(watchedDuracao || 0)}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+            )}
           </Grid>
+
+          {/* Alert de validação */}
+          {Object.keys(errors).length > 0 && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              Por favor, corrija os erros antes de continuar.
+            </Alert>
+          )}
         </DialogContent>
 
-        <DialogActions sx={{ p: 3, pt: 2 }}>
+        <DialogActions sx={{ p: 3, pt: 1 }}>
           <Button 
-            onClick={handleClose}
+            onClick={handleClose} 
             disabled={loading}
             variant="outlined"
           >
@@ -343,11 +321,10 @@ export default function ServicoForm({
           <Button
             type="submit"
             variant="contained"
-            disabled={loading || isSubmitting}
-            startIcon={<SaveIcon />}
-            sx={{ minWidth: 120 }}
+            disabled={loading || !isValid}
+            startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
           >
-            {loading ? 'Salvando...' : isEditing ? 'Atualizar' : 'Salvar'}
+            {loading ? 'Salvando...' : (isEditing ? 'Atualizar' : 'Salvar')}
           </Button>
         </DialogActions>
       </form>

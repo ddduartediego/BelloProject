@@ -11,19 +11,20 @@ import {
 } from '@mui/material'
 import {
   Add as AddIcon,
-  ContentCut as ServiceIcon,
+  Person as PersonIcon,
 } from '@mui/icons-material'
 import Layout from '@/components/common/Layout'
-import ServicoForm from '@/components/servicos/ServicoForm'
-import ServicosList from '@/components/servicos/ServicosList'
-import ConfirmDeleteDialog from '@/components/servicos/ConfirmDeleteDialog'
-import { Servico } from '@/types/database'
-import { servicosService } from '@/services'
+import ProfissionalForm from '@/components/profissionais/ProfissionalForm'
+import ProfissionaisList from '@/components/profissionais/ProfissionaisList'
+import ConfirmDeleteDialog from '@/components/profissionais/ConfirmDeleteDialog'
+import { ProfissionalComUsuario } from '@/services/profissionais.service'
+import { profissionaisService } from '@/services'
+import { usuariosService } from '@/services'
 
-export default function ServicosPage() {
+export default function ProfissionaisPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [selectedServico, setSelectedServico] = useState<Servico | null>(null)
+  const [selectedProfissional, setSelectedProfissional] = useState<ProfissionalComUsuario | null>(null)
   const [loading, setLoading] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [snackbar, setSnackbar] = useState<{
@@ -51,62 +52,84 @@ export default function ServicosPage() {
     setRefreshKey(prev => prev + 1)
   }, [])
 
-  // Função para abrir formulário de novo serviço
-  const handleNovoServico = () => {
-    setSelectedServico(null)
+  // Função para abrir formulário de novo profissional
+  const handleNovoProfissional = () => {
+    setSelectedProfissional(null)
     setFormOpen(true)
   }
 
   // Função para abrir formulário de edição
-  const handleEditServico = (servico: Servico) => {
-    setSelectedServico(servico)
+  const handleEditProfissional = (profissional: ProfissionalComUsuario) => {
+    setSelectedProfissional(profissional)
     setFormOpen(true)
   }
 
   // Função para abrir dialog de exclusão
-  const handleDeleteServico = (servico: Servico) => {
-    setSelectedServico(servico)
+  const handleDeleteProfissional = (profissional: ProfissionalComUsuario) => {
+    setSelectedProfissional(profissional)
     setDeleteDialogOpen(true)
   }
 
-  // Função para salvar serviço (criar ou editar)
-  const handleSaveServico = async (servicoData: {
+  // Função para salvar profissional (criar ou editar)
+  const handleSaveProfissional = async (profissionalData: {
     nome: string
-    descricao?: string
-    duracao_estimada_minutos: number
-    preco: number
+    telefone: string
+    email: string
+    especialidades: string[]
+    horarios_trabalho?: Record<string, string[]>
   }) => {
     setLoading(true)
     
     try {
       let response
       
-      if (selectedServico) {
-        // Editar serviço existente
-        response = await servicosService.update({
-          id: selectedServico.id,
-          ...servicoData
+      if (selectedProfissional) {
+        // Editar profissional existente
+        response = await profissionaisService.update({
+          id: selectedProfissional.id,
+          especialidades: profissionalData.especialidades,
+          horarios_trabalho: profissionalData.horarios_trabalho,
         })
       } else {
-        // Criar novo serviço
-        response = await servicosService.create(servicoData)
+        // Criar novo profissional
+        // Primeiro, criar o usuário
+        const userResponse = await usuariosService.create({
+          email: profissionalData.email,
+          nome_completo: profissionalData.nome,
+          tipo_usuario: 'PROFISSIONAL'
+        })
+        
+        if (userResponse.error) {
+          throw new Error(`Erro ao criar usuário: ${userResponse.error}`)
+        }
+        
+        if (!userResponse.data) {
+          throw new Error('Erro inesperado: usuário não foi criado')
+        }
+        
+        // Depois, criar o profissional usando o ID do usuário criado
+        response = await profissionaisService.create({
+          id_usuario: userResponse.data.id,
+          especialidades: profissionalData.especialidades,
+          horarios_trabalho: profissionalData.horarios_trabalho,
+        })
       }
       
       if (response.error) {
         throw new Error(response.error)
       }
       
-      const action = selectedServico ? 'atualizado' : 'cadastrado'
-      showSnackbar(`Serviço ${servicoData.nome} foi ${action} com sucesso!`)
+      const action = selectedProfissional ? 'atualizado' : 'cadastrado'
+      showSnackbar(`Profissional ${profissionalData.nome} foi ${action} com sucesso!`)
       
       setFormOpen(false)
-      setSelectedServico(null)
+      setSelectedProfissional(null)
       refreshList()
       
     } catch (error) {
-      console.error('Erro ao salvar serviço:', error)
+      console.error('Erro ao salvar profissional:', error)
       const errorMessage = error instanceof Error ? error.message : 'Erro inesperado'
-      showSnackbar(`Erro ao salvar serviço: ${errorMessage}`, 'error')
+      showSnackbar(`Erro ao salvar profissional: ${errorMessage}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -114,26 +137,26 @@ export default function ServicosPage() {
 
   // Função para confirmar exclusão
   const handleConfirmDelete = async () => {
-    if (!selectedServico) return
+    if (!selectedProfissional) return
     
     setLoading(true)
     
     try {
-      const response = await servicosService.delete(selectedServico.id)
+      const response = await profissionaisService.delete(selectedProfissional.id)
       
       if (response.error) {
         throw new Error(response.error)
       }
       
-      showSnackbar(`Serviço ${selectedServico.nome} foi excluído com sucesso!`)
+      showSnackbar(`Profissional ${selectedProfissional.usuario.nome_completo} foi excluído com sucesso!`)
       setDeleteDialogOpen(false)
-      setSelectedServico(null)
+      setSelectedProfissional(null)
       refreshList()
       
     } catch (error) {
-      console.error('Erro ao excluir serviço:', error)
+      console.error('Erro ao excluir profissional:', error)
       const errorMessage = error instanceof Error ? error.message : 'Erro inesperado'
-      showSnackbar(`Erro ao excluir serviço: ${errorMessage}`, 'error')
+      showSnackbar(`Erro ao excluir profissional: ${errorMessage}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -142,13 +165,13 @@ export default function ServicosPage() {
   // Função para fechar formulário
   const handleCloseForm = () => {
     setFormOpen(false)
-    setSelectedServico(null)
+    setSelectedProfissional(null)
   }
 
   // Função para fechar dialog de exclusão
   const handleCloseDeleteDialog = () => {
     setDeleteDialogOpen(false)
-    setSelectedServico(null)
+    setSelectedProfissional(null)
   }
 
   return (
@@ -162,13 +185,13 @@ export default function ServicosPage() {
           mb: 4 
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <ServiceIcon sx={{ fontSize: 32, color: 'primary.main' }} />
+            <PersonIcon sx={{ fontSize: 32, color: 'primary.main' }} />
             <Box>
               <Typography variant="h4" fontWeight="bold">
-                Gestão de Serviços
+                Gestão de Profissionais
               </Typography>
               <Typography variant="subtitle1" color="text.secondary">
-                Gerencie o catálogo de serviços do seu salão
+                Gerencie sua equipe de profissionais e especialidades
               </Typography>
             </Box>
           </Box>
@@ -176,7 +199,7 @@ export default function ServicosPage() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={handleNovoServico}
+            onClick={handleNovoProfissional}
             size="large"
             sx={{
               borderRadius: 2,
@@ -185,23 +208,23 @@ export default function ServicosPage() {
               px: 3,
             }}
           >
-            Novo Serviço
+            Novo Profissional
           </Button>
         </Box>
 
-        {/* Lista de serviços */}
-        <ServicosList
-          onEdit={handleEditServico}
-          onDelete={handleDeleteServico}
+        {/* Lista de profissionais */}
+        <ProfissionaisList
+          onEdit={handleEditProfissional}
+          onDelete={handleDeleteProfissional}
           refreshKey={refreshKey}
         />
 
-        {/* Formulário de serviço */}
-        <ServicoForm
+        {/* Formulário de profissional */}
+        <ProfissionalForm
           open={formOpen}
           onClose={handleCloseForm}
-          onSave={handleSaveServico}
-          servico={selectedServico || undefined}
+          onSave={handleSaveProfissional}
+          profissional={selectedProfissional || undefined}
           loading={loading}
         />
 
@@ -210,7 +233,7 @@ export default function ServicosPage() {
           open={deleteDialogOpen}
           onClose={handleCloseDeleteDialog}
           onConfirm={handleConfirmDelete}
-          servico={selectedServico}
+          profissional={selectedProfissional}
           loading={loading}
         />
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import {
   Box,
   Typography,
@@ -18,12 +18,14 @@ import ClienteForm from '@/components/clientes/ClienteForm'
 import ClientesList from '@/components/clientes/ClientesList'
 import ConfirmDeleteDialog from '@/components/clientes/ConfirmDeleteDialog'
 import { Cliente } from '@/types/database'
+import { clientesService } from '@/services'
 
 export default function ClientesPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
   const [loading, setLoading] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [snackbar, setSnackbar] = useState<{
     open: boolean
     message: string
@@ -43,6 +45,11 @@ export default function ClientesPage() {
   const handleCloseSnackbar = () => {
     setSnackbar(prev => ({ ...prev, open: false }))
   }
+
+  // Função para refresh da lista
+  const refreshList = useCallback(() => {
+    setRefreshKey(prev => prev + 1)
+  }, [])
 
   // Função para abrir formulário de novo cliente
   const handleNovoCliente = () => {
@@ -73,28 +80,34 @@ export default function ClientesPage() {
     setLoading(true)
     
     try {
-      // Simular delay da API
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      let response
       
       if (selectedCliente) {
-        // Simular edição
-        showSnackbar(`Cliente ${clienteData.nome} foi atualizado com sucesso!`)
+        // Editar cliente existente
+        response = await clientesService.update({
+          id: selectedCliente.id,
+          ...clienteData
+        })
       } else {
-        // Simular criação
-        showSnackbar(`Cliente ${clienteData.nome} foi cadastrado com sucesso!`)
+        // Criar novo cliente
+        response = await clientesService.create(clienteData)
       }
+      
+      if (response.error) {
+        throw new Error(response.error)
+      }
+      
+      const action = selectedCliente ? 'atualizado' : 'cadastrado'
+      showSnackbar(`Cliente ${clienteData.nome} foi ${action} com sucesso!`)
       
       setFormOpen(false)
       setSelectedCliente(null)
-      
-      // Aqui você integraria com a API real:
-      // const response = await supabase
-      //   .from('cliente')
-      //   .insert(clienteData) // ou .update(clienteData).eq('id', selectedCliente.id)
+      refreshList()
       
     } catch (error) {
       console.error('Erro ao salvar cliente:', error)
-      showSnackbar('Erro ao salvar cliente. Tente novamente.', 'error')
+      const errorMessage = error instanceof Error ? error.message : 'Erro inesperado'
+      showSnackbar(`Erro ao salvar cliente: ${errorMessage}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -107,22 +120,21 @@ export default function ClientesPage() {
     setLoading(true)
     
     try {
-      // Simular delay da API
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await clientesService.delete(selectedCliente.id)
+      
+      if (response.error) {
+        throw new Error(response.error)
+      }
       
       showSnackbar(`Cliente ${selectedCliente.nome} foi excluído com sucesso!`)
       setDeleteDialogOpen(false)
       setSelectedCliente(null)
-      
-      // Aqui você integraria com a API real:
-      // await supabase
-      //   .from('cliente')
-      //   .delete()
-      //   .eq('id', selectedCliente.id)
+      refreshList()
       
     } catch (error) {
       console.error('Erro ao excluir cliente:', error)
-      showSnackbar('Erro ao excluir cliente. Tente novamente.', 'error')
+      const errorMessage = error instanceof Error ? error.message : 'Erro inesperado'
+      showSnackbar(`Erro ao excluir cliente: ${errorMessage}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -182,6 +194,7 @@ export default function ClientesPage() {
         <ClientesList
           onEdit={handleEditCliente}
           onDelete={handleDeleteCliente}
+          refreshKey={refreshKey}
         />
 
         {/* Formulário de cliente */}

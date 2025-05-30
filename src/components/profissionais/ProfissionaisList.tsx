@@ -27,7 +27,6 @@ import {
   Select,
   SelectChangeEvent,
   Grid,
-  Paper,
   CircularProgress,
   Alert,
   Skeleton,
@@ -40,35 +39,32 @@ import {
   Person as PersonIcon,
   Phone as PhoneIcon,
   Email as EmailIcon,
-  Cake as CakeIcon,
-  FilterList as FilterIcon,
+  Work as WorkIcon,
+  Schedule as ScheduleIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material'
-import { Cliente } from '@/types/database'
-import { format, parseISO } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
-import { clientesService } from '@/services'
-import { PaginatedResponse } from '@/services/base.service'
+import { ProfissionalComUsuario } from '@/services/profissionais.service'
+import { profissionaisService } from '@/services'
 
-interface ClientesListProps {
-  onEdit: (cliente: Cliente) => void
-  onDelete: (cliente: Cliente) => void
+interface ProfissionaisListProps {
+  onEdit: (profissional: ProfissionalComUsuario) => void
+  onDelete: (profissional: ProfissionalComUsuario) => void
   refreshKey?: number
 }
 
-export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesListProps) {
-  const [clientes, setClientes] = useState<Cliente[]>([])
+export default function ProfissionaisList({ onEdit, onDelete, refreshKey }: ProfissionaisListProps) {
+  const [profissionais, setProfissionais] = useState<ProfissionalComUsuario[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
-  const [totalClientes, setTotalClientes] = useState(0)
+  const [totalProfissionais, setTotalProfissionais] = useState(0)
   const [itemsPerPage] = useState(10)
-  const [orderBy, setOrderBy] = useState('nome')
+  const [orderBy, setOrderBy] = useState('criado_em')
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
-  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
+  const [selectedProfissional, setSelectedProfissional] = useState<ProfissionalComUsuario | null>(null)
 
   // Debounce do termo de busca
   useEffect(() => {
@@ -79,46 +75,63 @@ export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesL
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  // Buscar clientes
-  const fetchClientes = useCallback(async () => {
+  // Buscar profissionais
+  const fetchProfissionais = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const filters = debouncedSearchTerm ? { nome: debouncedSearchTerm } : {}
+      const filters = debouncedSearchTerm ? { especialidade: debouncedSearchTerm } : {}
       const pagination = { page: currentPage, limit: itemsPerPage }
 
-      const response = await clientesService.getAll(pagination, filters, orderBy)
+      // Usar apenas campos válidos para ordenação no banco de dados
+      let validOrderBy = orderBy
+      if (orderBy === 'usuario.nome_completo') {
+        validOrderBy = 'criado_em' // Fallback para um campo válido
+      }
+
+      const response = await profissionaisService.getAll(pagination, filters, validOrderBy)
 
       if (response.error) {
         throw new Error(response.error)
       }
 
       if (response.data) {
-        setClientes(response.data.data)
+        let profissionaisData = response.data.data
+        
+        // Aplicar ordenação do lado do cliente para campos relacionados
+        if (orderBy === 'usuario.nome_completo') {
+          profissionaisData = [...profissionaisData].sort((a, b) => {
+            const nomeA = a.usuario.nome_completo.toLowerCase()
+            const nomeB = b.usuario.nome_completo.toLowerCase()
+            return nomeA.localeCompare(nomeB)
+          })
+        }
+        
+        setProfissionais(profissionaisData)
         setTotalPages(response.data.totalPages)
-        setTotalClientes(response.data.total)
+        setTotalProfissionais(response.data.total)
       }
     } catch (err) {
-      console.error('Erro ao buscar clientes:', err)
+      console.error('Erro ao buscar profissionais:', err)
       const errorMessage = err instanceof Error ? err.message : 'Erro inesperado'
-      setError(`Erro ao carregar clientes: ${errorMessage}`)
+      setError(`Erro ao carregar profissionais: ${errorMessage}`)
     } finally {
       setLoading(false)
     }
   }, [currentPage, itemsPerPage, debouncedSearchTerm, orderBy])
 
-  // Carregar clientes na inicialização e quando dependências mudarem
+  // Carregar profissionais na inicialização e quando dependências mudarem
   useEffect(() => {
-    fetchClientes()
-  }, [fetchClientes])
+    fetchProfissionais()
+  }, [fetchProfissionais])
 
   // Refresh quando refreshKey mudar
   useEffect(() => {
     if (refreshKey !== undefined && refreshKey > 0) {
-      fetchClientes()
+      fetchProfissionais()
     }
-  }, [refreshKey, fetchClientes])
+  }, [refreshKey, fetchProfissionais])
 
   // Reset para primeira página quando busca mudar
   useEffect(() => {
@@ -140,48 +153,28 @@ export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesL
     setCurrentPage(1)
   }
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, cliente: Cliente) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, profissional: ProfissionalComUsuario) => {
     setAnchorEl(event.currentTarget)
-    setSelectedCliente(cliente)
+    setSelectedProfissional(profissional)
   }
 
   const handleMenuClose = () => {
     setAnchorEl(null)
-    setSelectedCliente(null)
+    setSelectedProfissional(null)
   }
 
   const handleEdit = () => {
-    if (selectedCliente) {
-      onEdit(selectedCliente)
+    if (selectedProfissional) {
+      onEdit(selectedProfissional)
     }
     handleMenuClose()
   }
 
   const handleDelete = () => {
-    if (selectedCliente) {
-      onDelete(selectedCliente)
+    if (selectedProfissional) {
+      onDelete(selectedProfissional)
     }
     handleMenuClose()
-  }
-
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return '-'
-    try {
-      return format(parseISO(dateString), 'dd/MM/yyyy', { locale: ptBR })
-    } catch {
-      return '-'
-    }
-  }
-
-  const formatPhone = (phone: string) => {
-    // Formatar telefone brasileiro
-    const cleaned = phone.replace(/\D/g, '')
-    if (cleaned.length === 11) {
-      return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
-    } else if (cleaned.length === 10) {
-      return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
-    }
-    return phone
   }
 
   const getInitials = (name: string) => {
@@ -202,6 +195,26 @@ export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesL
     return colors[hash % colors.length]
   }
 
+  const formatEspecialidades = (especialidades?: string[]) => {
+    if (!especialidades || especialidades.length === 0) {
+      return 'Não especificado'
+    }
+    return especialidades.slice(0, 3).join(', ') + (especialidades.length > 3 ? '...' : '')
+  }
+
+  const getEspecialidadeColor = (especialidade: string) => {
+    const colorMap: Record<string, string> = {
+      'Corte': '#1976d2',
+      'Coloração': '#388e3c',
+      'Manicure': '#f57c00',
+      'Pedicure': '#d32f2f',
+      'Depilação': '#7b1fa2',
+      'Estética': '#00796b',
+      'Massagem': '#5d4037',
+    }
+    return colorMap[especialidade] || '#455a64'
+  }
+
   return (
     <Card>
       <CardContent>
@@ -209,18 +222,18 @@ export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesL
         <Box sx={{ mb: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6" fontWeight="bold">
-              Lista de Clientes
+              Lista de Profissionais
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <IconButton 
-                onClick={fetchClientes} 
+                onClick={fetchProfissionais} 
                 disabled={loading}
                 title="Atualizar lista"
               >
                 {loading ? <CircularProgress size={20} /> : <RefreshIcon />}
               </IconButton>
               <Typography variant="body2" color="text.secondary">
-                Total: {totalClientes} cliente{totalClientes !== 1 ? 's' : ''}
+                Total: {totalProfissionais} profissional{totalProfissionais !== 1 ? 'is' : ''}
               </Typography>
             </Box>
           </Box>
@@ -230,7 +243,7 @@ export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesL
               <TextField
                 fullWidth
                 variant="outlined"
-                placeholder="Pesquisar por nome, telefone ou email..."
+                placeholder="Pesquisar por nome, email ou especialidade..."
                 value={searchTerm}
                 onChange={handleSearchChange}
                 InputProps={{
@@ -251,9 +264,9 @@ export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesL
                   label="Ordenar por"
                   onChange={handleOrderByChange}
                 >
-                  <MenuItem value="nome">Nome</MenuItem>
+                  <MenuItem value="usuario.nome_completo">Nome</MenuItem>
                   <MenuItem value="criado_em">Data de Cadastro</MenuItem>
-                  <MenuItem value="data_nascimento">Data de Nascimento</MenuItem>
+                  <MenuItem value="especialidades">Especialidades</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -276,108 +289,122 @@ export default function ClientesList({ onEdit, onDelete, refreshKey }: ClientesL
                 <Box sx={{ flex: 1 }}>
                   <Skeleton variant="text" width="40%" height={24} />
                   <Skeleton variant="text" width="60%" height={20} />
+                  <Skeleton variant="text" width="50%" height={20} />
                 </Box>
               </Box>
             ))}
           </Box>
-        ) : clientes.length === 0 ? (
+        ) : profissionais.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
             <PersonIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
             <Typography variant="h6" color="text.secondary" gutterBottom>
-              {searchTerm ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
+              {searchTerm ? 'Nenhum profissional encontrado' : 'Nenhum profissional cadastrado'}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               {searchTerm 
                 ? 'Tente buscar com outros termos ou limpe o filtro' 
-                : 'Comece cadastrando seu primeiro cliente'
+                : 'Comece cadastrando seu primeiro profissional'
               }
             </Typography>
           </Box>
         ) : (
           <>
-            {/* Tabela de clientes */}
+            {/* Tabela de profissionais */}
             <TableContainer>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Cliente</TableCell>
+                    <TableCell>Profissional</TableCell>
                     <TableCell>Contato</TableCell>
-                    <TableCell>Aniversário</TableCell>
-                    <TableCell>Cadastrado em</TableCell>
+                    <TableCell>Especialidades</TableCell>
+                    <TableCell>Horários</TableCell>
                     <TableCell align="center">Ações</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {clientes.map((cliente) => (
-                    <TableRow key={cliente.id} hover>
+                  {profissionais.map((profissional) => (
+                    <TableRow key={profissional.id} hover>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                           <Avatar
                             sx={{
-                              bgcolor: getAvatarColor(cliente.nome),
+                              bgcolor: getAvatarColor(profissional.usuario.nome_completo),
                               width: 56,
                               height: 56,
                               fontSize: '1.2rem',
                               fontWeight: 'bold',
                             }}
                           >
-                            {getInitials(cliente.nome)}
+                            {getInitials(profissional.usuario.nome_completo)}
                           </Avatar>
                           <Box>
                             <Typography variant="subtitle1" fontWeight="medium">
-                              {cliente.nome}
+                              {profissional.usuario.nome_completo}
                             </Typography>
-                            {cliente.observacoes && (
-                              <Typography variant="caption" color="text.secondary">
-                                {cliente.observacoes.length > 50 
-                                  ? `${cliente.observacoes.substring(0, 50)}...` 
-                                  : cliente.observacoes
-                                }
-                              </Typography>
-                            )}
+                            <Typography variant="caption" color="text.secondary">
+                              {profissional.usuario.tipo_usuario}
+                            </Typography>
                           </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
                         <Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                            <PhoneIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                            <EmailIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                             <Typography variant="body2">
-                              {formatPhone(cliente.telefone)}
+                              {profissional.usuario.email}
                             </Typography>
                           </Box>
-                          {cliente.email && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <EmailIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <Typography variant="body2" color="text.secondary">
-                                {cliente.email}
-                              </Typography>
-                            </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {profissional.especialidades && profissional.especialidades.length > 0 ? (
+                            profissional.especialidades.slice(0, 3).map((especialidade, index) => (
+                              <Chip 
+                                key={index}
+                                label={especialidade}
+                                size="small"
+                                sx={{
+                                  bgcolor: getEspecialidadeColor(especialidade),
+                                  color: 'white',
+                                  fontWeight: 'medium',
+                                  fontSize: '0.75rem'
+                                }}
+                              />
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              Não especificado
+                            </Typography>
+                          )}
+                          {profissional.especialidades && profissional.especialidades.length > 3 && (
+                            <Chip 
+                              label={`+${profissional.especialidades.length - 3}`}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: '0.75rem' }}
+                            />
                           )}
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {cliente.data_nascimento ? (
+                        {profissional.horarios_trabalho && Object.keys(profissional.horarios_trabalho).length > 0 ? (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <CakeIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                            <ScheduleIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                             <Typography variant="body2">
-                              {formatDate(cliente.data_nascimento)}
+                              {Object.keys(profissional.horarios_trabalho).length} dia{Object.keys(profissional.horarios_trabalho).length !== 1 ? 's' : ''}
                             </Typography>
                           </Box>
                         ) : (
                           <Typography variant="body2" color="text.secondary">
-                            -
+                            Não configurado
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {formatDate(cliente.criado_em)}
-                        </Typography>
-                      </TableCell>
                       <TableCell align="center">
                         <IconButton
-                          onClick={(e) => handleMenuOpen(e, cliente)}
+                          onClick={(e) => handleMenuOpen(e, profissional)}
                           size="small"
                         >
                           <MoreVertIcon />
