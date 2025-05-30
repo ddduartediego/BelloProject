@@ -51,7 +51,7 @@ class ComandasService extends BaseService {
 
       console.log('🔍 DEBUG: EmpresaId encontrado:', empresaId)
 
-      // QUERY EXPANDIDA - adicionando dados relacionados de forma segura
+      // QUERY SEGURA - removendo JOIN problemático temporariamente
       let query = this.supabase
         .from('comanda')
         .select(`
@@ -74,8 +74,7 @@ class ComandasService extends BaseService {
           profissional_responsavel:id_profissional_responsavel(
             id,
             id_usuario,
-            especialidades,
-            usuario:id_usuario(nome, email)
+            especialidades
           )
         `, { count: 'exact' })
         .eq('id_empresa', empresaId)

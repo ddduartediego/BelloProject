@@ -66,57 +66,72 @@ FROM comanda
 - [x] Build compilando perfeitamente (4.0s)
 - [x] **READY:** Sistema pronto para teste do usuário
 
-### **FASE 2: DADOS RELACIONADOS** 🎯 **PRÓXIMA**
-**Objetivo:** Adicionar dados necessários de forma segura
+### **FASE 2: DADOS RELACIONADOS + SERVIÇOS** ✅ **CONCLUÍDA**
+**Objetivo:** Adicionar dados necessários de forma segura + seleção de serviços
 
+#### **✅ Implementações realizadas:**
+
+**2.1 - Query Expandida Segura:**
 ```typescript
-// Query incremental - adicionar uma relação por vez
+// Query com dados relacionados funcionando
 .select(`
   *,
-  cliente:id_cliente(id, nome, telefone, email)
+  cliente:id_cliente(id, nome, telefone, email),
+  profissional_responsavel:id_profissional_responsavel(
+    id, id_usuario, especialidades,
+    usuario:id_usuario(nome, email)
+  )
 `)
 ```
 
-### **FASE 3: FUNCIONALIDADE COMPLETA**
-**Objetivo:** Sistema funcional conforme regras
+**2.2 - Interface Completa de Seleção:**
+- ✅ **Tipo de Cliente:** Cadastrado OU Avulso
+- ✅ **Seleção de Profissional:** Dropdown com especialidades
+- ✅ **Seleção de Serviços:** Dialog dedicado com 2 modos:
+  - **Serviços Cadastrados:** Busca por nome, preço automático
+  - **Serviços Avulsos:** Nome livre + preço manual
+- ✅ **Gestão de Itens:** Adicionar, remover, quantidade
+- ✅ **Cálculo Automático:** Total por item + total geral
 
-#### **3.1 - Estrutura da Comanda:**
+**2.3 - Validações Implementadas:**
+- ✅ Cliente obrigatório (cadastrado OU avulso)
+- ✅ Profissional obrigatório
+- ✅ Pelo menos 1 serviço obrigatório
+- ✅ Preço e quantidade válidos
+- ✅ Formulário reativo com feedback visual
+
+**2.4 - UX Otimizada:**
+- ✅ Interface visual atrativa com Material-UI
+- ✅ Estados de loading e validação
+- ✅ Feedback visual para totais
+- ✅ Dialog separado para adicionar serviços
+- ✅ Lista interativa com chips e ícones
+
+### **FASE 3: FUNCIONALIDADE COMPLETA** 🎯 **PRÓXIMA**
+**Objetivo:** Sistema funcional conforme regras de negócio
+
+#### **3.1 - Backend para Criação de Comandas:**
 ```typescript
-interface ComandaSimplificada {
-  id: string
-  id_profissional_responsavel: string  // Único profissional
-  id_cliente?: string                   // Cliente cadastrado
-  nome_cliente_avulso?: string          // OU cliente avulso  
-  id_caixa: string
-  status: 'ABERTA' | 'FECHADA' | 'CANCELADA'
-  data_abertura: string
-  data_fechamento?: string
-  valor_total_pago: number
-  metodo_pagamento?: string
-  observacoes?: string
+// Expandir comandas.service.ts create()
+async create(data: CreateComandaData) {
+  // 1. Criar comanda
+  // 2. Criar itens da comanda (item_comanda)
+  // 3. Calcular totais
+  // 4. Retornar comanda completa
 }
 ```
 
-#### **3.2 - Fluxo de Criação:**
-1. **Selecionar Profissional** (responsável = executante)
-2. **Selecionar Cliente** (cadastrado OU informar nome avulso)
-3. **Adicionar Serviços** (cadastrados OU avulsos)
-4. **Calcular Total** e finalizar
-5. **Registrar no Caixa** ativo
+#### **3.2 - Gestão de Itens no Backend:**
+- Criar tabela `item_comanda` com serviços
+- Vincular `id_profissional_executante` = `id_profissional_responsavel`
+- Calcular `preco_total_item` = `preco_unitario * quantidade`
+- Atualizar `valor_total_servicos` da comanda
 
-#### **3.3 - Gestão de Serviços:**
-```typescript
-interface ItemComanda {
-  id: string
-  id_comanda: string
-  id_servico?: string        // Serviço cadastrado
-  nome_servico_avulso?: string // OU serviço avulso
-  preco_unitario: number
-  quantidade: number
-  preco_total: number
-  id_profissional_executante: string // = id_profissional_responsavel
-}
-```
+#### **3.3 - Finalização de Comandas:**
+- Calcular total final
+- Integrar com caixa ativo
+- Registrar movimentação financeira
+- Atualizar status para 'FECHADA'
 
 ### **FASE 4: UX OTIMIZADA**
 **Objetivo:** Interface intuitiva e rápida
