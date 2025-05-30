@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -22,6 +22,7 @@ import {
   FormControlLabel,
   Radio,
   FormLabel,
+  CircularProgress,
 } from '@mui/material'
 import {
   Close as CloseIcon,
@@ -33,6 +34,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Comanda, Cliente } from '@/types/database'
+import { clientesService, profissionaisService, type CreateComandaData } from '@/services'
 
 // Schema de validação com Zod
 const comandaSchema = z.object({
@@ -71,48 +73,11 @@ type ComandaFormData = z.infer<typeof comandaSchema>
 interface ComandaFormProps {
   open: boolean
   onClose: () => void
-  onSave: (comanda: ComandaFormData) => void
+  onSave: (comanda: CreateComandaData) => void
   comanda?: Partial<Comanda>
   loading?: boolean
   error?: string | null
 }
-
-// Dados simulados para demonstração
-const clientesData: Cliente[] = [
-  {
-    id: '1',
-    nome: 'Maria Silva Santos',
-    telefone: '(11) 99999-1111',
-    email: 'maria.silva@email.com',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-01-15T10:00:00Z',
-    atualizado_em: '2024-12-01T15:30:00Z',
-  },
-  {
-    id: '2',
-    nome: 'João Carlos Oliveira',
-    telefone: '(11) 99999-2222',
-    email: 'joao.carlos@email.com',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-02-20T14:30:00Z',
-    atualizado_em: '2024-11-28T09:15:00Z',
-  },
-  {
-    id: '3',
-    nome: 'Amanda Costa Ferreira',
-    telefone: '(11) 99999-3333',
-    email: 'amanda.costa@email.com',
-    id_empresa: 'empresa-1',
-    criado_em: '2024-03-10T11:20:00Z',
-    atualizado_em: '2024-12-05T16:45:00Z',
-  },
-]
-
-const profissionaisData = [
-  { id: '1', nome: 'Ana Carolina', especialidades: ['Corte', 'Coloração'] },
-  { id: '2', nome: 'Roberto Silva', especialidades: ['Barba', 'Corte Masculino'] },
-  { id: '3', nome: 'Carla Santos', especialidades: ['Manicure', 'Pedicure'] },
-]
 
 export default function ComandaForm({
   open,
@@ -123,6 +88,11 @@ export default function ComandaForm({
   error = null
 }: ComandaFormProps) {
   const isEditing = !!comanda?.id
+  
+  // Estados para dados carregados
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [profissionais, setProfissionais] = useState<any[]>([])
+  const [loadingData, setLoadingData] = useState(false)
 
   const {
     control,
@@ -143,8 +113,54 @@ export default function ComandaForm({
 
   const tipoCliente = watch('tipo_cliente')
 
+  // Carregar dados quando abrir o dialog
+  useEffect(() => {
+    if (open) {
+      carregarDados()
+    }
+  }, [open])
+
+  const carregarDados = async () => {
+    setLoadingData(true)
+    try {
+      // Carregar clientes e profissionais em paralelo
+      const [clientesResult, profissionaisResult] = await Promise.all([
+        clientesService.getAll({ page: 1, limit: 100 }),
+        profissionaisService.getAll({ page: 1, limit: 50 })
+      ])
+
+      if (clientesResult.data) {
+        // Verificar se é array ou objeto paginado
+        if (Array.isArray(clientesResult.data)) {
+          setClientes(clientesResult.data)
+        } else if (clientesResult.data && typeof clientesResult.data === 'object' && 'items' in clientesResult.data) {
+          setClientes(clientesResult.data.items as Cliente[])
+        }
+      }
+
+      if (profissionaisResult.data) {
+        // Verificar se é array ou objeto paginado
+        if (Array.isArray(profissionaisResult.data)) {
+          setProfissionais(profissionaisResult.data)
+        } else if (profissionaisResult.data && typeof profissionaisResult.data === 'object' && 'items' in profissionaisResult.data) {
+          setProfissionais(profissionaisResult.data.items as any[])
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+    } finally {
+      setLoadingData(false)
+    }
+  }
+
   const onSubmit = (data: ComandaFormData) => {
-    onSave(data)
+    const comandaData: CreateComandaData = {
+      id_cliente: data.tipo_cliente === 'cadastrado' ? data.id_cliente : undefined,
+      nome_cliente_avulso: data.tipo_cliente === 'avulso' ? data.nome_cliente_avulso : undefined,
+      id_profissional_responsavel: data.id_profissional_responsavel,
+      observacoes: data.observacoes || undefined
+    }
+    onSave(comandaData)
   }
 
   const handleClose = () => {
@@ -196,6 +212,13 @@ export default function ComandaForm({
             </Alert>
           )}
 
+          {loadingData && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress size={24} />
+              <Typography sx={{ ml: 2 }}>Carregando dados...</Typography>
+            </Box>
+          )}
+
           <Grid container spacing={3}>
             {/* Tipo de Cliente */}
             <Grid item xs={12}>
@@ -237,38 +260,37 @@ export default function ComandaForm({
                   render={({ field }) => (
                     <Autocomplete
                       {...field}
-                      options={clientesData}
+                      options={clientes}
                       getOptionLabel={(option) => typeof option === 'string' ? 
-                        clientesData.find(c => c.id === option)?.nome || '' : 
+                        clientes.find(c => c.id === option)?.nome || '' : 
                         option.nome
                       }
-                      value={clientesData.find(c => c.id === field.value) || null}
+                      value={clientes.find(c => c.id === field.value) || null}
                       onChange={(_, newValue) => {
                         field.onChange(newValue?.id || '')
                       }}
+                      disabled={loading || loadingData}
                       renderInput={(params) => (
                         <TextField
                           {...params}
                           label="Cliente *"
                           error={!!errors.id_cliente}
                           helperText={errors.id_cliente?.message as string}
-                          disabled={loading}
                           placeholder="Busque por nome, telefone ou email"
                         />
                       )}
                       renderOption={(props, option) => (
                         <Box component="li" {...props}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
-                            <PersonIcon color="action" />
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="body1">{option.nome}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {option.telefone} • {option.email}
-                              </Typography>
-                            </Box>
+                          <PersonIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                          <Box sx={{ flexGrow: 1 }}>
+                            <Typography variant="body1">{option.nome}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {option.telefone} {option.email && `• ${option.email}`}
+                            </Typography>
                           </Box>
                         </Box>
                       )}
+                      noOptionsText={loadingData ? "Carregando..." : "Nenhum cliente encontrado"}
                     />
                   )}
                 />
@@ -284,12 +306,12 @@ export default function ComandaForm({
                   render={({ field }) => (
                     <TextField
                       {...field}
-                      label="Nome do Cliente *"
                       fullWidth
+                      label="Nome do Cliente *"
                       error={!!errors.nome_cliente_avulso}
-                      helperText={errors.nome_cliente_avulso?.message as string || 'Digite o nome do cliente avulso'}
+                      helperText={errors.nome_cliente_avulso?.message as string}
                       disabled={loading}
-                      placeholder="Ex: João da Silva"
+                      placeholder="Digite o nome do cliente"
                     />
                   )}
                 />
@@ -307,22 +329,26 @@ export default function ComandaForm({
                     <Select
                       {...field}
                       label="Profissional Responsável *"
-                      disabled={loading}
+                      disabled={loading || loadingData}
                     >
-                      {profissionaisData.map((profissional) => (
+                      {profissionais.map((profissional) => (
                         <MenuItem key={profissional.id} value={profissional.id}>
                           <Box>
-                            <Typography variant="body1">{profissional.nome}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {profissional.especialidades.join(', ')}
+                            <Typography variant="body1">
+                              {profissional.usuario?.nome || 'Nome não disponível'}
                             </Typography>
+                            {profissional.especialidades && profissional.especialidades.length > 0 && (
+                              <Typography variant="body2" color="text.secondary">
+                                {profissional.especialidades.join(', ')}
+                              </Typography>
+                            )}
                           </Box>
                         </MenuItem>
                       ))}
                     </Select>
                     {errors.id_profissional_responsavel && (
-                      <Typography variant="caption" color="error" sx={{ mt: 0.5, mx: 1.75 }}>
-                        {String(errors.id_profissional_responsavel.message || 'Erro de validação')}
+                      <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.75 }}>
+                        {errors.id_profissional_responsavel.message}
                       </Typography>
                     )}
                   </FormControl>
@@ -338,14 +364,14 @@ export default function ComandaForm({
                 render={({ field }) => (
                   <TextField
                     {...field}
+                    fullWidth
                     label="Observações"
                     multiline
                     rows={3}
-                    fullWidth
                     error={!!errors.observacoes}
-                    helperText={errors.observacoes?.message as string || 'Informações adicionais sobre a comanda'}
+                    helperText={errors.observacoes?.message as string}
                     disabled={loading}
-                    placeholder="Ex: Cliente preferencial, desconto especial, etc."
+                    placeholder="Observações sobre a comanda (opcional)"
                   />
                 )}
               />
@@ -353,22 +379,25 @@ export default function ComandaForm({
           </Grid>
         </DialogContent>
 
-        <DialogActions sx={{ p: 3, pt: 2 }}>
+        <DialogActions sx={{ p: 3, pt: 1 }}>
           <Button 
-            onClick={handleClose}
-            disabled={loading}
+            onClick={handleClose} 
             variant="outlined"
+            disabled={loading}
           >
             Cancelar
           </Button>
           <Button
             type="submit"
             variant="contained"
-            disabled={loading || isSubmitting}
-            startIcon={<SaveIcon />}
-            sx={{ minWidth: 120 }}
+            startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
+            disabled={loading || loadingData}
+            sx={{
+              minWidth: 120,
+              textTransform: 'none',
+            }}
           >
-            {loading ? 'Abrindo...' : isEditing ? 'Atualizar' : 'Abrir Comanda'}
+            {loading ? 'Salvando...' : (isEditing ? 'Atualizar' : 'Criar Comanda')}
           </Button>
         </DialogActions>
       </form>

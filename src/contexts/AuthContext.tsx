@@ -44,92 +44,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Primeiro, tentar com RLS bypass usando service role se disponível
       const { data, error } = await supabase
         .from('usuario')
         .select('*')
         .eq('id', user.id)
-        .maybeSingle() // Use maybeSingle instead of single to handle 0 rows gracefully
+        .single()
 
-      if (error) {
-        console.error('Erro ao buscar dados do usuário:', {
-          message: error.message,
-          code: error.code
-        })
-        
-        // Se erro é de RLS/permissões, criar usuário automaticamente
-        if (error.code === 'PGRST116' || error.message.includes('406') || error.message.includes('RLS')) {
-          try {
-            const { data: newUser, error: createError } = await supabase
-              .from('usuario')
-              .insert([
-                {
-                  id: user.id,
-                  email: user.email,
-                  nome_completo: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuário',
-                  tipo_usuario: 'ADMINISTRADOR' as const, // Default para novos usuários OAuth
-                  criado_em: new Date().toISOString(),
-                  atualizado_em: new Date().toISOString()
-                }
-              ])
-              .select()
-              .single()
-
-            if (createError) {
-              console.error('Erro ao criar usuário:', createError)
-              setUsuario(null)
-              return
-            }
-
-            setUsuario(newUser)
-            return
-          } catch (createErr) {
-            console.error('Erro inesperado ao criar usuário:', createErr)
-            setUsuario(null)
-            return
-          }
-        }
-        
-        setUsuario(null)
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao buscar dados do usuário:', error.message)
         return
       }
 
-      // Se não há erro mas também não há dados, usuário não existe
-      if (!data) {
-        try {
-          const { data: newUser, error: createError } = await supabase
-            .from('usuario')
-            .insert([
-              {
-                id: user.id,
-                email: user.email,
-                nome_completo: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuário',
-                tipo_usuario: 'ADMINISTRADOR' as const, // Default para novos usuários OAuth
-                criado_em: new Date().toISOString(),
-                atualizado_em: new Date().toISOString()
-              }
-            ])
-            .select()
-            .single()
-
-          if (createError) {
-            console.error('Erro ao criar usuário (sem erro prévio):', createError)
-            setUsuario(null)
-            return
-          }
-
-          setUsuario(newUser)
-          return
-        } catch (createErr) {
-          console.error('Erro inesperado ao criar usuário (sem erro prévio):', createErr)
-          setUsuario(null)
-          return
-        }
-      }
-
       setUsuario(data || null)
-    } catch (err) {
-      console.error('Erro inesperado ao buscar usuário:', err)
+    } catch {
+      console.error('Erro inesperado ao buscar usuário')
       setUsuario(null)
     }
   }, [user, supabase])
@@ -147,8 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       return { error: null }
-    } catch (err) {
-      console.error('Erro inesperado no signIn:', err)
+    } catch {
       return { error: 'Erro inesperado durante o login' }
     }
   }
@@ -168,8 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       return { error: null }
-    } catch (err) {
-      console.error('Erro inesperado no signInWithGoogle:', err)
+    } catch {
       return { error: 'Erro inesperado durante o login com Google' }
     }
   }
@@ -201,16 +127,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Monitorar mudanças no estado de autenticação
   useEffect(() => {
-    // Pegar sessão inicial
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-    })
+    let mounted = true
+
+    const initializeAuth = async () => {
+      try {
+        // Pegar sessão inicial
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (!mounted) return
+
+        setSession(session)
+        setUser(session?.user ?? null)
+        
+        if (!session) {
+          setLoading(false)
+        }
+      } catch (error) {
+        console.error('Erro ao inicializar autenticação:', error)
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    initializeAuth()
 
     // Escutar mudanças na autenticação
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+
+      console.log('Auth state change:', event, session?.user?.email)
+      
       setSession(session)
       setUser(session?.user ?? null)
       
@@ -220,6 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     return () => {
+      mounted = false
       subscription.unsubscribe()
     }
   }, [supabase.auth])
@@ -228,15 +178,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user) {
       fetchUsuario()
+    } else {
+      setUsuario(null)
     }
   }, [user, fetchUsuario])
 
   // Marcar loading como false após verificações iniciais
   useEffect(() => {
-    if (user !== null || session === null) {
-      setLoading(false)
-    }
-  }, [user, session])
+    const timer = setTimeout(() => {
+      if (user === null || (user && (usuario !== null || usuario === null))) {
+        setLoading(false)
+      }
+    }, 1000) // Aguarda 1 segundo para processos de inicialização
+
+    return () => clearTimeout(timer)
+  }, [user, usuario])
 
   const value: AuthContextType = {
     user,

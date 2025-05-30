@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Box,
   Typography,
@@ -23,6 +23,8 @@ import {
   FormControl,
   InputLabel,
   Select,
+  CircularProgress,
+  Backdrop,
 } from '@mui/material'
 import {
   Add as AddIcon,
@@ -39,165 +41,31 @@ import Layout from '@/components/common/Layout'
 import ComandaForm from '@/components/comandas/ComandaForm'
 import ComandaDetalhes from '@/components/comandas/ComandaDetalhes'
 import PaymentDialog from '@/components/comandas/PaymentDialog'
-import { ComandaComDetalhes, ItemComanda, MetodoPagamento } from '@/types/database'
-
-// Dados simulados para demonstração
-const comandasSimuladas: ComandaComDetalhes[] = [
-  {
-    id: '1',
-    id_cliente: '1',
-    nome_cliente_avulso: undefined,
-    id_profissional_responsavel: '1',
-    id_caixa: 'caixa-1',
-    id_empresa: 'empresa-1',
-    data_abertura: new Date().toISOString(),
-    data_fechamento: undefined,
-    valor_total_servicos: 125.00,
-    valor_total_produtos: 77.00,
-    valor_desconto: 20.00,
-    valor_total_pago: 182.00,
-    metodo_pagamento: undefined,
-    status: 'ABERTA',
-    criado_em: new Date().toISOString(),
-    atualizado_em: new Date().toISOString(),
-    cliente: {
-      id: '1',
-      nome: 'Maria Silva Santos',
-      telefone: '(11) 99999-1111',
-      email: 'maria.silva@email.com',
-      id_empresa: 'empresa-1',
-      criado_em: '2024-01-15T10:00:00Z',
-      atualizado_em: '2024-12-01T15:30:00Z',
-    },
-    profissional_responsavel: {
-      id: '1',
-      id_usuario: 'user-1',
-      id_empresa: 'empresa-1',
-      especialidades: ['Corte', 'Coloração'],
-      criado_em: '2024-01-01T00:00:00Z',
-      atualizado_em: '2024-01-01T00:00:00Z',
-    },
-    caixa: {
-      id: 'caixa-1',
-      id_empresa: 'empresa-1',
-      data_abertura: new Date().toISOString(),
-      saldo_inicial: 100.00,
-      status: 'ABERTO',
-      criado_em: new Date().toISOString(),
-      atualizado_em: new Date().toISOString(),
-    },
-    itens: [
-      {
-        id: 'item-1',
-        id_comanda: '1',
-        id_servico: '1',
-        quantidade: 1,
-        preco_unitario_registrado: 80.00,
-        preco_total_item: 80.00,
-        id_profissional_executante: '1',
-        criado_em: new Date().toISOString(),
-        atualizado_em: new Date().toISOString(),
-        servico: {
-          id: '1',
-          id_empresa: 'empresa-1',
-          nome: 'Corte Feminino',
-          preco: 80.00,
-          duracao_estimada_minutos: 60,
-          criado_em: '2024-01-01T00:00:00Z',
-          atualizado_em: '2024-01-01T00:00:00Z',
-        },
-      },
-      {
-        id: 'item-2',
-        id_comanda: '1',
-        id_produto: '1',
-        quantidade: 2,
-        preco_unitario_registrado: 35.00,
-        preco_total_item: 70.00,
-        criado_em: new Date().toISOString(),
-        atualizado_em: new Date().toISOString(),
-        produto: {
-          id: '1',
-          id_empresa: 'empresa-1',
-          nome: 'Shampoo Premium',
-          preco_venda: 35.00,
-          estoque_atual: 25,
-          criado_em: '2024-01-01T00:00:00Z',
-          atualizado_em: '2024-01-01T00:00:00Z',
-        },
-      },
-    ],
-  },
-  {
-    id: '2',
-    id_cliente: undefined,
-    nome_cliente_avulso: 'João Silva',
-    id_profissional_responsavel: '2',
-    id_caixa: 'caixa-1',
-    id_empresa: 'empresa-1',
-    data_abertura: new Date(Date.now() - 86400000).toISOString(), // 1 dia atrás
-    data_fechamento: new Date(Date.now() - 82800000).toISOString(), // 1 dia atrás + 1h
-    valor_total_servicos: 60.00,
-    valor_total_produtos: 0.00,
-    valor_desconto: 0.00,
-    valor_total_pago: 60.00,
-    metodo_pagamento: 'DINHEIRO',
-    status: 'FECHADA',
-    criado_em: new Date(Date.now() - 86400000).toISOString(),
-    atualizado_em: new Date(Date.now() - 82800000).toISOString(),
-    cliente: undefined,
-    profissional_responsavel: {
-      id: '2',
-      id_usuario: 'user-2',
-      id_empresa: 'empresa-1',
-      especialidades: ['Barba', 'Corte Masculino'],
-      criado_em: '2024-01-01T00:00:00Z',
-      atualizado_em: '2024-01-01T00:00:00Z',
-    },
-    caixa: {
-      id: 'caixa-1',
-      id_empresa: 'empresa-1',
-      data_abertura: new Date().toISOString(),
-      saldo_inicial: 100.00,
-      status: 'ABERTO',
-      criado_em: new Date().toISOString(),
-      atualizado_em: new Date().toISOString(),
-    },
-    itens: [
-      {
-        id: 'item-3',
-        id_comanda: '2',
-        id_servico: '4',
-        quantidade: 1,
-        preco_unitario_registrado: 60.00,
-        preco_total_item: 60.00,
-        id_profissional_executante: '2',
-        criado_em: new Date().toISOString(),
-        atualizado_em: new Date().toISOString(),
-        servico: {
-          id: '4',
-          id_empresa: 'empresa-1',
-          nome: 'Corte Masculino + Barba',
-          preco: 60.00,
-          duracao_estimada_minutos: 45,
-          criado_em: '2024-01-01T00:00:00Z',
-          atualizado_em: '2024-01-01T00:00:00Z',
-        },
-      },
-    ],
-  },
-]
+import { 
+  ComandaComDetalhes, 
+  ItemComanda, 
+  MetodoPagamento,
+  StatusComanda
+} from '@/types/database'
+import { 
+  comandasService, 
+  itensComandaService,
+  type CreateComandaData,
+  type ComandaFilters,
+  type FinalizarComandaData 
+} from '@/services'
 
 export default function ComandasPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   
-  const [comandas, setComandas] = useState<ComandaComDetalhes[]>(comandasSimuladas)
+  const [comandas, setComandas] = useState<ComandaComDetalhes[]>([])
   const [comandaFormOpen, setComandaFormOpen] = useState(false)
   const [comandaDetalhesOpen, setComandaDetalhesOpen] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [selectedComanda, setSelectedComanda] = useState<ComandaComDetalhes | null>(null)
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [busca, setBusca] = useState('')
   const [snackbar, setSnackbar] = useState<{
@@ -209,6 +77,54 @@ export default function ComandasPage() {
     message: '',
     severity: 'success'
   })
+
+  // Carregar comandas na inicialização
+  useEffect(() => {
+    carregarComandas()
+  }, [])
+
+  // Carregar comandas do Supabase
+  const carregarComandas = async () => {
+    try {
+      setInitialLoading(true)
+      
+      const response = await comandasService.getAll(
+        { page: 1, limit: 100 },
+        { 
+          status: filtroStatus !== 'todos' ? filtroStatus.toUpperCase() as StatusComanda : undefined, 
+          busca: busca || undefined 
+        }
+      )
+
+      if (response.error) {
+        showSnackbar('Erro ao carregar comandas: ' + response.error, 'error')
+        return
+      }
+
+      const data = response.data
+      
+      // Verificar se data é um array ou um objeto paginado
+      if (Array.isArray(data)) {
+        setComandas(data)
+      } else if (data && typeof data === 'object' && 'items' in data) {
+        setComandas(data.items as ComandaComDetalhes[])
+      } else {
+        setComandas([])
+      }
+    } catch (err) {
+      console.error('Erro na requisição:', err)
+      showSnackbar('Erro inesperado ao carregar comandas', 'error')
+    } finally {
+      setInitialLoading(false)
+    }
+  }
+
+  // Recarregar quando filtros mudarem
+  useEffect(() => {
+    if (!initialLoading) {
+      carregarComandas()
+    }
+  }, [filtroStatus, busca])
 
   // Função para mostrar notificação
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
@@ -233,85 +149,86 @@ export default function ComandasPage() {
   }
 
   // Função para salvar comanda
-  const handleSaveComanda = async (comandaData: any) => {
+  const handleSaveComanda = async (comandaData: CreateComandaData) => {
     setLoading(true)
     
     try {
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
       if (selectedComanda) {
-        showSnackbar('Comanda atualizada com sucesso!')
         // Atualizar comanda existente
-        setComandas(prev => prev.map(c => 
-          c.id === selectedComanda.id 
-            ? { ...c, ...comandaData } 
-            : c
-        ))
+        const { data, error } = await comandasService.update({
+          id: selectedComanda.id,
+          ...comandaData
+        })
+
+        if (error) {
+          showSnackbar('Erro ao atualizar comanda: ' + error, 'error')
+          return
+        }
+
+        showSnackbar('Comanda atualizada com sucesso!')
       } else {
         // Criar nova comanda
-        const novaComanda: ComandaComDetalhes = {
-          id: `comanda-${Date.now()}`,
-          ...comandaData,
-          id_caixa: 'caixa-1',
-          id_empresa: 'empresa-1',
-          data_abertura: new Date().toISOString(),
-          valor_total_servicos: 0,
-          valor_total_produtos: 0,
-          valor_desconto: 0,
-          valor_total_pago: 0,
-          status: 'ABERTA',
-          criado_em: new Date().toISOString(),
-          atualizado_em: new Date().toISOString(),
-          caixa: comandasSimuladas[0].caixa,
-          itens: [],
+        const { data, error } = await comandasService.create(comandaData)
+
+        if (error) {
+          showSnackbar('Erro ao criar comanda: ' + error, 'error')
+          return
         }
-        
-        setComandas(prev => [novaComanda, ...prev])
+
         showSnackbar('Comanda criada com sucesso!')
       }
       
       setComandaFormOpen(false)
       setSelectedComanda(null)
       
+      // Recarregar lista
+      await carregarComandas()
+      
     } catch (error) {
       console.error('Erro ao salvar comanda:', error)
-      showSnackbar('Erro ao salvar comanda. Tente novamente.', 'error')
+      showSnackbar('Erro inesperado ao salvar comanda', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   // Função para adicionar item à comanda
-  const handleAddItem = async (item: Partial<ItemComanda>) => {
+  const handleAddItem = async (item: {
+    id_servico?: string
+    id_produto?: string
+    quantidade: number
+    id_profissional_executante?: string
+  }) => {
     if (!selectedComanda) return
     
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      const novoItem = {
-        ...item,
-        id: `item-${Date.now()}`,
-        criado_em: new Date().toISOString(),
-        atualizado_em: new Date().toISOString(),
+      const { data, error } = await itensComandaService.create({
+        id_comanda: selectedComanda.id,
+        ...item
+      })
+
+      if (error) {
+        showSnackbar('Erro ao adicionar item: ' + error, 'error')
+        return
       }
-      
-      const comandaAtualizada = {
-        ...selectedComanda,
-        itens: [...(selectedComanda.itens || []), novoItem],
-        valor_total_servicos: selectedComanda.valor_total_servicos + (item.id_servico ? item.preco_total_item || 0 : 0),
-        valor_total_produtos: selectedComanda.valor_total_produtos + (item.id_produto ? item.preco_total_item || 0 : 0),
-      }
-      
-      setSelectedComanda(comandaAtualizada as ComandaComDetalhes)
-      setComandas(prev => prev.map(c => 
-        c.id === selectedComanda.id ? comandaAtualizada as ComandaComDetalhes : c
-      ))
-      
+
       showSnackbar('Item adicionado com sucesso!')
+      
+      // Recarregar detalhes da comanda
+      const { data: comandaAtualizada } = await comandasService.getById(selectedComanda.id)
+      if (comandaAtualizada) {
+        setSelectedComanda(comandaAtualizada)
+        
+        // Atualizar na lista também
+        setComandas(prev => prev.map(c => 
+          c.id === selectedComanda.id ? comandaAtualizada : c
+        ))
+      }
+      
     } catch (error) {
-      showSnackbar('Erro ao adicionar item', 'error')
+      console.error('Erro ao adicionar item:', error)
+      showSnackbar('Erro inesperado ao adicionar item', 'error')
     } finally {
       setLoading(false)
     }
@@ -323,26 +240,29 @@ export default function ComandasPage() {
     
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const { data, error } = await itensComandaService.delete(itemId)
+
+      if (error) {
+        showSnackbar('Erro ao remover item: ' + error, 'error')
+        return
+      }
+
+      showSnackbar('Item removido com sucesso!')
       
-      const itemRemovido = selectedComanda.itens?.find(i => i.id === itemId)
-      if (!itemRemovido) return
-      
-      const comandaAtualizada = {
-        ...selectedComanda,
-        itens: selectedComanda.itens?.filter(i => i.id !== itemId) || [],
-        valor_total_servicos: selectedComanda.valor_total_servicos - (itemRemovido.id_servico ? itemRemovido.preco_total_item : 0),
-        valor_total_produtos: selectedComanda.valor_total_produtos - (itemRemovido.id_produto ? itemRemovido.preco_total_item : 0),
+      // Recarregar detalhes da comanda
+      const { data: comandaAtualizada } = await comandasService.getById(selectedComanda.id)
+      if (comandaAtualizada) {
+        setSelectedComanda(comandaAtualizada)
+        
+        // Atualizar na lista também
+        setComandas(prev => prev.map(c => 
+          c.id === selectedComanda.id ? comandaAtualizada : c
+        ))
       }
       
-      setSelectedComanda(comandaAtualizada as ComandaComDetalhes)
-      setComandas(prev => prev.map(c => 
-        c.id === selectedComanda.id ? comandaAtualizada as ComandaComDetalhes : c
-      ))
-      
-      showSnackbar('Item removido com sucesso!')
     } catch (error) {
-      showSnackbar('Erro ao remover item', 'error')
+      console.error('Erro ao remover item:', error)
+      showSnackbar('Erro inesperado ao remover item', 'error')
     } finally {
       setLoading(false)
     }
@@ -352,26 +272,7 @@ export default function ComandasPage() {
   const handleApplyDiscount = async (desconto: number) => {
     if (!selectedComanda) return
     
-    setLoading(true)
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      const comandaAtualizada = {
-        ...selectedComanda,
-        valor_desconto: desconto,
-      }
-      
-      setSelectedComanda(comandaAtualizada as ComandaComDetalhes)
-      setComandas(prev => prev.map(c => 
-        c.id === selectedComanda.id ? comandaAtualizada as ComandaComDetalhes : c
-      ))
-      
-      showSnackbar(`Desconto de R$ ${desconto.toFixed(2).replace('.', ',')} aplicado!`)
-    } catch (error) {
-      showSnackbar('Erro ao aplicar desconto', 'error')
-    } finally {
-      setLoading(false)
-    }
+    showSnackbar('Funcionalidade em desenvolvimento', 'info')
   }
 
   // Função para abrir modal de pagamento
@@ -380,47 +281,42 @@ export default function ComandasPage() {
   }
 
   // Função para confirmar pagamento
-  const handleConfirmPayment = async (metodo: MetodoPagamento, valorPago: number) => {
+  const handleConfirmPayment = async (metodo: MetodoPagamento, valorDesconto?: number) => {
     if (!selectedComanda) return
     
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const comandaAtualizada = {
-        ...selectedComanda,
-        status: 'FECHADA' as const,
+      const dadosFinalizacao: FinalizarComandaData = {
         metodo_pagamento: metodo,
-        valor_total_pago: valorPago,
-        data_fechamento: new Date().toISOString(),
-        atualizado_em: new Date().toISOString(),
+        valor_desconto: valorDesconto || selectedComanda.valor_desconto,
+        observacoes_pagamento: `Pagamento via ${metodo}`
       }
-      
-      setSelectedComanda(comandaAtualizada)
-      setComandas(prev => prev.map(c => 
-        c.id === selectedComanda.id ? comandaAtualizada : c
-      ))
-      
+
+      const { data, error } = await comandasService.finalizarComanda(
+        selectedComanda.id, 
+        dadosFinalizacao
+      )
+
+      if (error) {
+        showSnackbar('Erro ao processar pagamento: ' + error, 'error')
+        return
+      }
+
       setPaymentDialogOpen(false)
       setComandaDetalhesOpen(false)
       
       showSnackbar('Pagamento processado com sucesso! Comanda finalizada.')
+      
+      // Recarregar lista
+      await carregarComandas()
+      
     } catch (error) {
-      showSnackbar('Erro ao processar pagamento', 'error')
+      console.error('Erro ao processar pagamento:', error)
+      showSnackbar('Erro inesperado ao processar pagamento', 'error')
     } finally {
       setLoading(false)
     }
   }
-
-  // Filtrar comandas
-  const comandasFiltradas = comandas.filter(comanda => {
-    const matchStatus = filtroStatus === 'todos' || comanda.status === filtroStatus.toUpperCase()
-    const matchBusca = busca === '' || 
-      (comanda.cliente?.nome || comanda.nome_cliente_avulso || '').toLowerCase().includes(busca.toLowerCase()) ||
-      comanda.id.toLowerCase().includes(busca.toLowerCase())
-    
-    return matchStatus && matchBusca
-  })
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -446,6 +342,19 @@ export default function ComandasPage() {
       default:
         return status
     }
+  }
+
+  if (initialLoading) {
+    return (
+      <Layout>
+        <Backdrop open={true} sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <CircularProgress color="inherit" />
+            <Typography>Carregando comandas...</Typography>
+          </Box>
+        </Backdrop>
+      </Layout>
+    )
   }
 
   return (
@@ -515,7 +424,7 @@ export default function ComandasPage() {
                 <Select
                   value={filtroStatus}
                   label="Status"
-                  onChange={(e) => setFiltroStatus(e.target.value as typeof filtroStatus)}
+                  onChange={(e) => setFiltroStatus(e.target.value)}
                 >
                   <MenuItem value="todos">Todos</MenuItem>
                   <MenuItem value="aberta">Abertas</MenuItem>
@@ -529,7 +438,7 @@ export default function ComandasPage() {
 
         {/* Lista de Comandas */}
         <Grid container spacing={3}>
-          {comandasFiltradas.length === 0 ? (
+          {comandas.length === 0 ? (
             <Grid item xs={12}>
               <Box sx={{ 
                 textAlign: 'center', 
@@ -548,7 +457,7 @@ export default function ComandasPage() {
               </Box>
             </Grid>
           ) : (
-            comandasFiltradas.map((comanda) => (
+            comandas.map((comanda) => (
               <Grid item xs={12} sm={6} lg={4} key={comanda.id}>
                 <Card sx={{
                   cursor: 'pointer',
@@ -648,7 +557,7 @@ export default function ComandasPage() {
             open={comandaDetalhesOpen}
             onClose={() => setComandaDetalhesOpen(false)}
             onFinishComanda={handleFinishComanda}
-            onUpdateComanda={() => {}}
+            onUpdateComanda={() => carregarComandas()}
           />
         )}
 
@@ -679,6 +588,14 @@ export default function ComandasPage() {
             {snackbar.message}
           </Alert>
         </Snackbar>
+
+        {/* Loading overlay */}
+        <Backdrop 
+          open={loading} 
+          sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.modal + 1 }}
+        >
+          <CircularProgress color="inherit" />
+        </Backdrop>
       </Container>
     </Layout>
   )

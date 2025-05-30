@@ -20,6 +20,7 @@ import {
   Divider,
   Stack,
   Alert,
+  CircularProgress,
 } from '@mui/material'
 import {
   Close as CloseIcon,
@@ -33,7 +34,7 @@ import { MetodoPagamento } from '@/types/database'
 interface PaymentDialogProps {
   open: boolean
   onClose: () => void
-  onConfirm: (metodo: MetodoPagamento, valorPago: number) => void
+  onConfirm: (metodo: MetodoPagamento, valorDesconto?: number) => void
   total: number
   loading?: boolean
 }
@@ -71,10 +72,12 @@ export default function PaymentDialog({
       return
     }
 
-    onConfirm(metodoPagamento, valorPago)
+    onConfirm(metodoPagamento)
   }
 
   const handleClose = () => {
+    if (loading) return // Não permitir fechar durante loading
+    
     setErro('')
     setValorPago(total)
     setMetodoPagamento('DINHEIRO')
@@ -84,6 +87,7 @@ export default function PaymentDialog({
   React.useEffect(() => {
     if (open) {
       setValorPago(total)
+      setErro('')
     }
   }, [open, total])
 
@@ -142,7 +146,7 @@ export default function PaymentDialog({
               Finalizar Pagamento
             </Typography>
           </Box>
-          <IconButton onClick={handleClose} size="small">
+          <IconButton onClick={handleClose} size="small" disabled={loading}>
             <CloseIcon />
           </IconButton>
         </Box>
@@ -172,7 +176,7 @@ export default function PaymentDialog({
         <Grid container spacing={3}>
           {/* Método de Pagamento */}
           <Grid item xs={12}>
-            <FormControl component="fieldset">
+            <FormControl component="fieldset" disabled={loading}>
               <FormLabel component="legend" sx={{ mb: 2, fontWeight: 'bold' }}>
                 Método de Pagamento *
               </FormLabel>
@@ -242,6 +246,7 @@ export default function PaymentDialog({
               value={valorPago}
               onChange={(e) => setValorPago(Math.max(0, parseFloat(e.target.value) || 0))}
               fullWidth
+              disabled={loading}
               inputProps={{ 
                 min: 0, 
                 step: 0.01,
@@ -317,8 +322,8 @@ export default function PaymentDialog({
         <Button
           onClick={handleConfirm}
           variant="contained"
-          disabled={loading}
-          startIcon={getPaymentIcon(metodoPagamento)}
+          disabled={loading || valorPago <= 0}
+          startIcon={loading ? <CircularProgress size={20} /> : getPaymentIcon(metodoPagamento)}
           sx={{ minWidth: 140 }}
           color="success"
         >
