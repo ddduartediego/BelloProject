@@ -49,12 +49,7 @@ const comandaSchema = z.object({
     .optional(),
   id_profissional_responsavel: z
     .string()
-    .min(1, 'Profissional responsável é obrigatório'),
-  observacoes: z
-    .string()
-    .max(500, 'Observações devem ter no máximo 500 caracteres')
-    .optional()
-    .or(z.literal('')),
+    .min(1, 'Profissional responsável é obrigatório')
 }).refine((data) => {
   if (data.tipo_cliente === 'cadastrado') {
     return !!data.id_cliente
@@ -107,7 +102,6 @@ export default function ComandaForm({
       id_cliente: comanda?.id_cliente || '',
       nome_cliente_avulso: comanda?.nome_cliente_avulso || '',
       id_profissional_responsavel: comanda?.id_profissional_responsavel || '',
-      observacoes: '',
     },
   })
 
@@ -158,7 +152,6 @@ export default function ComandaForm({
       id_cliente: data.tipo_cliente === 'cadastrado' ? data.id_cliente : undefined,
       nome_cliente_avulso: data.tipo_cliente === 'avulso' ? data.nome_cliente_avulso : undefined,
       id_profissional_responsavel: data.id_profissional_responsavel,
-      observacoes: data.observacoes || undefined
     }
     onSave(comandaData)
   }
@@ -175,7 +168,6 @@ export default function ComandaForm({
         id_cliente: comanda.id_cliente || '',
         nome_cliente_avulso: comanda.nome_cliente_avulso || '',
         id_profissional_responsavel: comanda.id_profissional_responsavel || '',
-        observacoes: '',
       })
     }
   }, [open, comanda, reset])
@@ -352,27 +344,6 @@ export default function ComandaForm({
                       </Typography>
                     )}
                   </FormControl>
-                )}
-              />
-            </Grid>
-
-            {/* Observações */}
-            <Grid item xs={12}>
-              <Controller
-                name="observacoes"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    fullWidth
-                    label="Observações"
-                    multiline
-                    rows={3}
-                    error={!!errors.observacoes}
-                    helperText={errors.observacoes?.message as string}
-                    disabled={loading}
-                    placeholder="Observações sobre a comanda (opcional)"
-                  />
                 )}
               />
             </Grid>

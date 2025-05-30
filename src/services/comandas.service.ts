@@ -6,7 +6,6 @@ export interface CreateComandaData {
   id_cliente?: string
   nome_cliente_avulso?: string
   id_profissional_responsavel: string
-  observacoes?: string
 }
 
 export interface UpdateComandaData extends Partial<CreateComandaData> {
@@ -36,42 +35,40 @@ class ComandasService extends BaseService {
     orderBy?: string
   ): Promise<ServiceResponse<PaginatedResponse<ComandaComDetalhes>>> {
     try {
+      console.log('🔍 DEBUG: Iniciando getAll comandas SIMPLIFICADO com filtros:', filters)
+      
       const empresaId = await empresaService.getEmpresaAtualId()
       if (!empresaId) {
         return { data: null, error: 'Empresa não encontrada' }
       }
 
+      console.log('🔍 DEBUG: EmpresaId encontrado:', empresaId)
+
+      // QUERY SIMPLIFICADA - testando campos básicos primeiro
       let query = this.supabase
         .from('comanda')
         .select(`
-          *,
-          cliente:id_cliente(id, nome, telefone, email),
-          profissional_responsavel:id_profissional_responsavel(
-            id, 
-            id_usuario, 
-            especialidades,
-            usuario:id_usuario(nome, email)
-          ),
-          caixa:id_caixa(id, data_abertura, saldo_inicial, status),
-          itens:item_comanda(
-            id,
-            id_servico,
-            id_produto, 
-            quantidade,
-            preco_unitario_registrado,
-            preco_total_item,
-            id_profissional_executante,
-            servico:id_servico(id, nome, preco, duracao_estimada_minutos),
-            produto:id_produto(id, nome, preco_venda, estoque_atual),
-            profissional_executante:id_profissional_executante(
-              id,
-              usuario:id_usuario(nome)
-            )
-          )
+          id,
+          id_cliente,
+          nome_cliente_avulso,
+          id_profissional_responsavel,
+          id_caixa,
+          status,
+          data_abertura,
+          data_fechamento,
+          valor_total_servicos,
+          valor_total_produtos,
+          valor_desconto,
+          valor_total_pago,
+          metodo_pagamento,
+          criado_em,
+          atualizado_em
         `, { count: 'exact' })
         .eq('id_empresa', empresaId)
 
-      // Aplicar filtros
+      console.log('🔍 DEBUG: Query SIMPLIFICADA construída, aplicando filtros...')
+
+      // Aplicar filtros básicos
       if (filters.status) {
         query = query.eq('status', filters.status)
       }
@@ -89,20 +86,24 @@ class ComandasService extends BaseService {
       }
       if (filters.busca) {
         query = query.or(`
-          cliente.nome.ilike.%${filters.busca}%,
           nome_cliente_avulso.ilike.%${filters.busca}%,
           id.ilike.%${filters.busca}%
         `)
       }
 
       // Aplicar ordenação
-      query = this.applyOrdering(query, orderBy || 'data_abertura', false) // Mais recentes primeiro
+      query = this.applyOrdering(query, orderBy || 'data_abertura', false)
       
       // Aplicar paginação
       query = this.applyPagination(query, pagination)
 
-      return this.handlePaginatedRequest(query, pagination)
+      console.log('🔍 DEBUG: Executando query SIMPLIFICADA...')
+      const result = await this.handlePaginatedRequest(query, pagination) as ServiceResponse<PaginatedResponse<ComandaComDetalhes>>
+      console.log('🔍 DEBUG: Resultado da query SIMPLIFICADA:', result.error ? `ERRO: ${result.error}` : `Sucesso: ${result.data?.data?.length} comandas`)
+      
+      return result
     } catch (err) {
+      console.error('🚨 DEBUG: Erro capturado em getAll SIMPLIFICADO:', err)
       return {
         data: null,
         error: this.handleError(err as Error)
@@ -111,6 +112,8 @@ class ComandasService extends BaseService {
   }
 
   async getById(id: string): Promise<ServiceResponse<ComandaComDetalhes>> {
+    console.log('🔍 DEBUG: Buscando comanda por ID:', id)
+    
     const query = this.supabase
       .from('comanda')
       .select(`
@@ -120,7 +123,7 @@ class ComandasService extends BaseService {
           id, 
           id_usuario, 
           especialidades,
-          usuario:id_usuario(nome, email)
+          usuario_responsavel:id_usuario(nome, email)
         ),
         caixa:id_caixa(id, data_abertura, saldo_inicial, status),
         itens:item_comanda(
@@ -135,14 +138,16 @@ class ComandasService extends BaseService {
           produto:id_produto(id, nome, preco_venda, estoque_atual),
           profissional_executante:id_profissional_executante(
             id,
-            usuario:id_usuario(nome)
+            usuario_executante:id_usuario(nome)
           )
         )
       `)
       .eq('id', id)
       .single()
 
-    return this.handleRequest(query)
+    const result = await this.handleRequest(query) as ServiceResponse<ComandaComDetalhes>
+    console.log('🔍 DEBUG: Resultado getById:', result.error ? `ERRO: ${result.error}` : 'Sucesso')
+    return result
   }
 
   async create(data: CreateComandaData): Promise<ServiceResponse<Comanda>> {
@@ -377,7 +382,6 @@ class ComandasService extends BaseService {
         .from('comanda')
         .update({
           status: 'CANCELADA' as StatusComanda,
-          observacoes: motivo,
           atualizado_em: new Date().toISOString()
         })
         .eq('id', id)
