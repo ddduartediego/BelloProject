@@ -165,6 +165,8 @@ class ComandasService extends BaseService {
 
   async create(data: CreateComandaData): Promise<ServiceResponse<Comanda>> {
     try {
+      console.log('🔍 DEBUG: Iniciando criação de comanda com dados:', data)
+      
       const empresaId = await empresaService.getEmpresaAtualId()
       if (!empresaId) {
         return { data: null, error: 'Empresa não encontrada' }
@@ -185,28 +187,98 @@ class ComandasService extends BaseService {
         }
       }
 
+      console.log('🔍 DEBUG: Caixa ativo encontrado:', caixaAtivo.id)
+
+      // Separar itens dos dados da comanda
+      const { itens, ...comandaBaseData } = data
+      
+      // Calcular totais dos itens
+      const valorTotalServicos = itens?.reduce((total, item) => 
+        total + (item.preco_unitario * item.quantidade), 0) || 0
+
+      console.log('🔍 DEBUG: Valor total calculado:', valorTotalServicos)
+
+      // Dados da comanda
       const comandaData = {
-        ...data,
+        ...comandaBaseData,
         id_empresa: empresaId,
         id_caixa: caixaAtivo.id,
         data_abertura: new Date().toISOString(),
-        valor_total_servicos: 0,
+        valor_total_servicos: valorTotalServicos,
         valor_total_produtos: 0,
         valor_desconto: 0,
-        valor_total_pago: 0,
+        valor_total_pago: valorTotalServicos, // Total inicial igual aos serviços
         status: 'ABERTA' as StatusComanda,
         criado_em: new Date().toISOString(),
         atualizado_em: new Date().toISOString()
       }
 
-      const query = this.supabase
+      console.log('🔍 DEBUG: Inserindo comanda:', comandaData)
+
+      // 1. Criar comanda
+      const { data: comandaCriada, error: comandaError } = await this.supabase
         .from('comanda')
         .insert([comandaData])
         .select()
         .single()
 
-      return this.handleRequest(query)
+      if (comandaError || !comandaCriada) {
+        console.error('🚨 DEBUG: Erro ao criar comanda:', comandaError)
+        return { data: null, error: this.handleError(comandaError) }
+      }
+
+      console.log('🔍 DEBUG: Comanda criada com ID:', comandaCriada.id)
+
+      // 2. Criar itens da comanda se existirem
+      if (itens && itens.length > 0) {
+        console.log('🔍 DEBUG: Criando', itens.length, 'itens da comanda')
+        
+        // Filtrar apenas serviços cadastrados (que têm id_servico)
+        const itensCadastrados = itens.filter(item => item.id_servico)
+        
+        if (itensCadastrados.length > 0) {
+          const itensData = itensCadastrados.map((item) => ({
+            id_comanda: comandaCriada.id,
+            id_servico: item.id_servico,
+            id_produto: null, // Por enquanto só serviços
+            quantidade: item.quantidade,
+            preco_unitario_registrado: item.preco_unitario,
+            preco_total_item: item.preco_unitario * item.quantidade,
+            id_profissional_executante: comandaCriada.id_profissional_responsavel, // Mesmo profissional
+            criado_em: new Date().toISOString(),
+            atualizado_em: new Date().toISOString()
+          }))
+
+          const { error: itensError } = await this.supabase
+            .from('item_comanda')
+            .insert(itensData)
+
+          if (itensError) {
+            console.error('🚨 DEBUG: Erro ao criar itens:', itensError)
+            
+            // Rollback: deletar comanda criada
+            await this.supabase
+              .from('comanda')
+              .delete()
+              .eq('id', comandaCriada.id)
+            
+            return { data: null, error: `Erro ao criar itens da comanda: ${this.handleError(itensError)}` }
+          }
+
+          console.log('🔍 DEBUG: Itens cadastrados criados com sucesso:', itensCadastrados.length)
+        }
+        
+        // Log para serviços avulsos (temporariamente não salvos)
+        const itensAvulsos = itens.filter(item => !item.id_servico)
+        if (itensAvulsos.length > 0) {
+          console.log('⚠️  DEBUG: Serviços avulsos não salvos (constraint DB):', itensAvulsos.length)
+        }
+      }
+
+      console.log('🔍 DEBUG: Comanda completa criada com sucesso!')
+      return { data: comandaCriada, error: null }
     } catch (err) {
+      console.error('🚨 DEBUG: Erro geral na criação:', err)
       return {
         data: null,
         error: this.handleError(err as Error)

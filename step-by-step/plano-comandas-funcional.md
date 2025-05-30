@@ -34,6 +34,19 @@
 **Causa:** Schema real não possui coluna `observacoes` na tabela `comanda`
 **Solução:** Remover todas as referências a `observacoes`
 
+### **ERRO REINCIDENTE:** "column usuario_2.nome does not exist" ✅ RESOLVIDO
+**Causa:** Query expandida com JOIN aninhado problemático
+**Solução:** Remover JOIN `usuario:id_usuario(nome, email)` temporariamente
+
+### **QUERY ATUAL FUNCIONANDO:**
+```sql
+-- Query segura com dados relacionados básicos
+profissional_responsavel:id_profissional_responsavel(
+  id, id_usuario, especialidades
+)
+cliente:id_cliente(id, nome, telefone, email)
+```
+
 ### **CORREÇÕES APLICADAS:**
 #### **1. comandas.service.ts:**
 - ✅ Removido `observacoes` da query SELECT
