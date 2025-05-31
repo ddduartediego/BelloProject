@@ -1,6 +1,7 @@
 import { BaseService, ServiceResponse, PaginationParams, PaginatedResponse } from './base.service'
 import { Comanda, ComandaComDetalhes, StatusComanda, MetodoPagamento } from '@/types/database'
 import empresaService from './empresa.service'
+import movimentacoesCaixaService from './movimentacoesCaixa.service'
 
 export interface CreateComandaData {
   id_cliente?: string
@@ -42,16 +43,12 @@ class ComandasService extends BaseService {
     orderBy?: string
   ): Promise<ServiceResponse<PaginatedResponse<ComandaComDetalhes>>> {
     try {
-      console.log('🔍 DEBUG: Iniciando getAll comandas SIMPLIFICADO com filtros:', filters)
-      
       const empresaId = await empresaService.getEmpresaAtualId()
       if (!empresaId) {
         return { data: null, error: 'Empresa não encontrada' }
       }
 
-      console.log('🔍 DEBUG: EmpresaId encontrado:', empresaId)
-
-      // QUERY SEGURA - removendo JOIN problemático temporariamente
+      // Query para buscar comandas com relacionamentos
       let query = this.supabase
         .from('comanda')
         .select(`
@@ -74,12 +71,11 @@ class ComandasService extends BaseService {
           profissional_responsavel:id_profissional_responsavel(
             id,
             id_usuario,
-            especialidades
+            especialidades,
+            usuario_responsavel:id_usuario(nome_completo, email)
           )
         `, { count: 'exact' })
         .eq('id_empresa', empresaId)
-
-      console.log('🔍 DEBUG: Query SIMPLIFICADA construída, aplicando filtros...')
 
       // Aplicar filtros básicos
       if (filters.status) {
@@ -110,13 +106,11 @@ class ComandasService extends BaseService {
       // Aplicar paginação
       query = this.applyPagination(query, pagination)
 
-      console.log('🔍 DEBUG: Executando query SIMPLIFICADA...')
       const result = await this.handlePaginatedRequest(query, pagination) as ServiceResponse<PaginatedResponse<ComandaComDetalhes>>
-      console.log('🔍 DEBUG: Resultado da query SIMPLIFICADA:', result.error ? `ERRO: ${result.error}` : `Sucesso: ${result.data?.data?.length} comandas`)
       
       return result
     } catch (err) {
-      console.error('🚨 DEBUG: Erro capturado em getAll SIMPLIFICADO:', err)
+      console.error('Erro ao buscar comandas:', err)
       return {
         data: null,
         error: this.handleError(err as Error)
@@ -125,8 +119,6 @@ class ComandasService extends BaseService {
   }
 
   async getById(id: string): Promise<ServiceResponse<ComandaComDetalhes>> {
-    console.log('🔍 DEBUG: Buscando comanda por ID:', id)
-    
     const query = this.supabase
       .from('comanda')
       .select(`
@@ -136,13 +128,15 @@ class ComandasService extends BaseService {
           id, 
           id_usuario, 
           especialidades,
-          usuario_responsavel:id_usuario(nome, email)
+          usuario_responsavel:id_usuario(nome_completo, email)
         ),
         caixa:id_caixa(id, data_abertura, saldo_inicial, status),
         itens:item_comanda(
           id,
           id_servico,
           id_produto, 
+          nome_servico_avulso,
+          descricao_servico_avulso,
           quantidade,
           preco_unitario_registrado,
           preco_total_item,
@@ -151,7 +145,7 @@ class ComandasService extends BaseService {
           produto:id_produto(id, nome, preco_venda, estoque_atual),
           profissional_executante:id_profissional_executante(
             id,
-            usuario_executante:id_usuario(nome)
+            usuario_executante:id_usuario(nome_completo)
           )
         )
       `)
@@ -159,14 +153,12 @@ class ComandasService extends BaseService {
       .single()
 
     const result = await this.handleRequest(query) as ServiceResponse<ComandaComDetalhes>
-    console.log('🔍 DEBUG: Resultado getById:', result.error ? `ERRO: ${result.error}` : 'Sucesso')
+    
     return result
   }
 
   async create(data: CreateComandaData): Promise<ServiceResponse<Comanda>> {
     try {
-      console.log('🔍 DEBUG: Iniciando criação de comanda com dados:', data)
-      
       const empresaId = await empresaService.getEmpresaAtualId()
       if (!empresaId) {
         return { data: null, error: 'Empresa não encontrada' }
@@ -187,16 +179,12 @@ class ComandasService extends BaseService {
         }
       }
 
-      console.log('🔍 DEBUG: Caixa ativo encontrado:', caixaAtivo.id)
-
       // Separar itens dos dados da comanda
       const { itens, ...comandaBaseData } = data
       
       // Calcular totais dos itens
       const valorTotalServicos = itens?.reduce((total, item) => 
         total + (item.preco_unitario * item.quantidade), 0) || 0
-
-      console.log('🔍 DEBUG: Valor total calculado:', valorTotalServicos)
 
       // Dados da comanda
       const comandaData = {
@@ -207,13 +195,11 @@ class ComandasService extends BaseService {
         valor_total_servicos: valorTotalServicos,
         valor_total_produtos: 0,
         valor_desconto: 0,
-        valor_total_pago: valorTotalServicos, // Total inicial igual aos serviços
+        valor_total_pago: valorTotalServicos,
         status: 'ABERTA' as StatusComanda,
         criado_em: new Date().toISOString(),
         atualizado_em: new Date().toISOString()
       }
-
-      console.log('🔍 DEBUG: Inserindo comanda:', comandaData)
 
       // 1. Criar comanda
       const { data: comandaCriada, error: comandaError } = await this.supabase
@@ -223,62 +209,49 @@ class ComandasService extends BaseService {
         .single()
 
       if (comandaError || !comandaCriada) {
-        console.error('🚨 DEBUG: Erro ao criar comanda:', comandaError)
+        console.error('Erro ao criar comanda:', comandaError)
         return { data: null, error: this.handleError(comandaError) }
       }
 
-      console.log('🔍 DEBUG: Comanda criada com ID:', comandaCriada.id)
-
       // 2. Criar itens da comanda se existirem
       if (itens && itens.length > 0) {
-        console.log('🔍 DEBUG: Criando', itens.length, 'itens da comanda')
-        
-        // Filtrar apenas serviços cadastrados (que têm id_servico)
-        const itensCadastrados = itens.filter(item => item.id_servico)
-        
-        if (itensCadastrados.length > 0) {
-          const itensData = itensCadastrados.map((item) => ({
-            id_comanda: comandaCriada.id,
-            id_servico: item.id_servico,
-            id_produto: null, // Por enquanto só serviços
-            quantidade: item.quantidade,
-            preco_unitario_registrado: item.preco_unitario,
-            preco_total_item: item.preco_unitario * item.quantidade,
-            id_profissional_executante: comandaCriada.id_profissional_responsavel, // Mesmo profissional
-            criado_em: new Date().toISOString(),
-            atualizado_em: new Date().toISOString()
-          }))
+        // Preparar todos os itens (cadastrados e avulsos)
+        const itensData = itens.map((item) => ({
+          id_comanda: comandaCriada.id,
+          // Serviço cadastrado ou avulso
+          id_servico: item.id_servico || null,
+          nome_servico_avulso: item.nome_servico_avulso || null,
+          descricao_servico_avulso: item.nome_servico_avulso ? 'Serviço avulso' : null,
+          // Por enquanto só serviços (produtos virão depois)
+          id_produto: null,
+          quantidade: item.quantidade,
+          preco_unitario_registrado: item.preco_unitario,
+          preco_total_item: item.preco_unitario * item.quantidade,
+          id_profissional_executante: comandaCriada.id_profissional_responsavel,
+          criado_em: new Date().toISOString(),
+          atualizado_em: new Date().toISOString()
+        }))
 
-          const { error: itensError } = await this.supabase
-            .from('item_comanda')
-            .insert(itensData)
+        const { error: itensError } = await this.supabase
+          .from('item_comanda')
+          .insert(itensData)
 
-          if (itensError) {
-            console.error('🚨 DEBUG: Erro ao criar itens:', itensError)
-            
-            // Rollback: deletar comanda criada
-            await this.supabase
-              .from('comanda')
-              .delete()
-              .eq('id', comandaCriada.id)
-            
-            return { data: null, error: `Erro ao criar itens da comanda: ${this.handleError(itensError)}` }
-          }
-
-          console.log('🔍 DEBUG: Itens cadastrados criados com sucesso:', itensCadastrados.length)
-        }
-        
-        // Log para serviços avulsos (temporariamente não salvos)
-        const itensAvulsos = itens.filter(item => !item.id_servico)
-        if (itensAvulsos.length > 0) {
-          console.log('⚠️  DEBUG: Serviços avulsos não salvos (constraint DB):', itensAvulsos.length)
+        if (itensError) {
+          console.error('Erro ao criar itens da comanda:', itensError)
+          
+          // Rollback: deletar comanda criada
+          await this.supabase
+            .from('comanda')
+            .delete()
+            .eq('id', comandaCriada.id)
+          
+          return { data: null, error: `Erro ao criar itens da comanda: ${this.handleError(itensError)}` }
         }
       }
 
-      console.log('🔍 DEBUG: Comanda completa criada com sucesso!')
       return { data: comandaCriada, error: null }
     } catch (err) {
-      console.error('🚨 DEBUG: Erro geral na criação:', err)
+      console.error('Erro geral na criação da comanda:', err)
       return {
         data: null,
         error: this.handleError(err as Error)
@@ -353,16 +326,18 @@ class ComandasService extends BaseService {
       const { data: comanda, error: comandaError } = await this.getById(id)
       
       if (comandaError || !comanda) {
+        console.error('Erro ao buscar comanda:', comandaError)
         return { data: null, error: comandaError || 'Comanda não encontrada' }
       }
 
       if (comanda.status !== 'ABERTA') {
+        console.error('Status inválido para finalização:', comanda.status)
         return { data: null, error: 'Apenas comandas abertas podem ser finalizadas' }
       }
 
       // Calcular totais
       const valorTotalServicos = comanda.itens
-        ?.filter(item => item.id_servico)
+        ?.filter(item => item.id_servico || item.nome_servico_avulso)
         .reduce((total, item) => total + item.preco_total_item, 0) || 0
 
       const valorTotalProdutos = comanda.itens
@@ -390,30 +365,30 @@ class ComandasService extends BaseService {
         .single()
 
       if (updateError) {
+        console.error('Erro ao atualizar comanda:', updateError)
         return { data: null, error: this.handleError(updateError) }
       }
 
       // Buscar caixa ativo para criar movimentação
       if (valorTotalPago > 0) {
-        const { data: caixaAtivo } = await this.supabase
+        const { data: caixaAtivo, error: caixaError } = await this.supabase
           .from('caixa')
-          .select('id')
+          .select('id, status')
           .eq('id_empresa', comanda.id_empresa || 'empresa-default')
           .eq('status', 'ABERTO')
           .single()
         
         if (caixaAtivo) {
-          // Criar movimentação no caixa (entrada pela venda)
-          await this.supabase
-            .from('movimentacao_caixa')
-            .insert([{
-              id_caixa: caixaAtivo.id,
-              id_comanda: id,
-              valor: valorTotalPago,
-              descricao: `Venda - Comanda #${id.substring(0, 8)}`,
-              id_profissional_responsavel: comanda.id_profissional_responsavel,
-              criado_em: new Date().toISOString()
-            }])
+          const { data: movimentacao, error: movError } = await movimentacoesCaixaService.criarEntradaVenda(
+            caixaAtivo.id,
+            id,
+            valorTotalPago,
+            `Venda - Comanda #${id.substring(0, 8)} - ${dadosPagamento.metodo_pagamento}`
+          )
+          
+          if (movError) {
+            console.error('Erro ao criar movimentação no caixa:', movError)
+          }
         } else {
           console.warn('Nenhum caixa ativo encontrado para registrar a venda')
         }
@@ -428,19 +403,23 @@ class ComandasService extends BaseService {
             console.warn(`Estoque negativo para produto ${item.produto.nome}`)
           }
 
-          await this.supabase
+          const { error: estoqueError } = await this.supabase
             .from('produto')
             .update({
               estoque_atual: novoEstoque,
               atualizado_em: new Date().toISOString()
             })
             .eq('id', item.id_produto)
+            
+          if (estoqueError) {
+            console.error('Erro ao atualizar estoque:', estoqueError)
+          }
         }
       }
 
-      // Retornar comanda atualizada
       return this.getById(id)
     } catch (err) {
+      console.error('Erro geral na finalização da comanda:', err)
       return {
         data: null,
         error: this.handleError(err as Error)
@@ -497,7 +476,7 @@ class ComandasService extends BaseService {
           cliente:id_cliente(id, nome, telefone),
           profissional_responsavel:id_profissional_responsavel(
             id, 
-            usuario:id_usuario(nome)
+            usuario:id_usuario(nome_completo)
           ),
           itens:item_comanda(
             id,

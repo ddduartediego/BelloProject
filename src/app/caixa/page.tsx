@@ -81,7 +81,7 @@ export default function CaixaPage() {
       setInitialLoading(true)
       
       // Carregar caixa ativo
-      const { data: caixa, error: caixaError } = await caixaService.getCaixaAtivo('empresa-default')
+      const { data: caixa, error: caixaError } = await caixaService.getCaixaAtivo()
       
       if (caixaError && !caixaError.includes('Nenhum caixa ativo')) {
         console.error('Erro ao carregar caixa:', caixaError)
@@ -177,7 +177,6 @@ export default function CaixaPage() {
     setLoading(true)
     try {
       const dadosAbertura = {
-        id_empresa: 'empresa-default',
         saldo_inicial: saldoInicial,
         observacoes: observacoes
       }
@@ -212,8 +211,8 @@ export default function CaixaPage() {
     setLoading(true)
     try {
       const dadosFechamento = {
-        saldo_final_declarado: saldoCalculado,
-        observacoes_fechamento: observacoes
+        saldo_final_informado: saldoCalculado,
+        observacoes: observacoes
       }
       
       const { data, error } = await caixaService.fechar(caixaAtivo.id, dadosFechamento)

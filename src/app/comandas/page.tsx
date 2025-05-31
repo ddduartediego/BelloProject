@@ -101,13 +101,13 @@ export default function ComandasPage() {
         return
       }
 
-      const data = response.data
+      const responseData = response.data
       
-      // Verificar se data é um array ou um objeto paginado
-      if (Array.isArray(data)) {
-        setComandas(data)
-      } else if (data && typeof data === 'object' && 'items' in data) {
-        setComandas(data.items as ComandaComDetalhes[])
+      // Verificar se responseData é um objeto paginado com propriedade data
+      if (responseData && typeof responseData === 'object' && 'data' in responseData) {
+        setComandas(responseData.data as ComandaComDetalhes[])
+      } else if (Array.isArray(responseData)) {
+        setComandas(responseData)
       } else {
         setComandas([])
       }
@@ -143,9 +143,30 @@ export default function ComandasPage() {
   }
 
   // Função para visualizar detalhes da comanda
-  const handleViewComanda = (comanda: ComandaComDetalhes) => {
-    setSelectedComanda(comanda)
-    setComandaDetalhesOpen(true)
+  const handleViewComanda = async (comanda: ComandaComDetalhes) => {
+    setLoading(true)
+    
+    try {
+      // Buscar comanda completa com itens
+      const { data: comandaCompleta, error } = await comandasService.getById(comanda.id)
+      
+      if (error) {
+        showSnackbar('Erro ao carregar detalhes da comanda: ' + error, 'error')
+        return
+      }
+      
+      if (comandaCompleta) {
+        setSelectedComanda(comandaCompleta)
+        setComandaDetalhesOpen(true)
+      } else {
+        showSnackbar('Comanda não encontrada', 'error')
+      }
+    } catch (error) {
+      console.error('Erro ao carregar comanda:', error)
+      showSnackbar('Erro inesperado ao carregar detalhes da comanda', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   // Função para salvar comanda
@@ -477,6 +498,9 @@ export default function ComandasPage() {
                         </Typography>
                         <Typography variant="body1" color="text.secondary">
                           {comanda.cliente?.nome || comanda.nome_cliente_avulso}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Profissional: {(comanda.profissional_responsavel as any)?.usuario_responsavel?.nome_completo || 'Não identificado'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           {new Date(comanda.data_abertura).toLocaleDateString('pt-BR')} às{' '}

@@ -170,34 +170,35 @@ export default function ComandaForm({
         servicosService.getAll({ page: 1, limit: 100 })
       ])
 
-      if (clientesResult.data) {
-        // Verificar se é array ou objeto paginado
-        if (Array.isArray(clientesResult.data)) {
-          setClientes(clientesResult.data)
-        } else if (clientesResult.data && typeof clientesResult.data === 'object' && 'items' in clientesResult.data) {
-          setClientes(clientesResult.data.items as Cliente[])
-        }
+      // Processar clientes
+      if (clientesResult.data && clientesResult.data.data) {
+        setClientes(clientesResult.data.data)
+      } else {
+        console.warn('Nenhum cliente encontrado:', clientesResult.error)
+        setClientes([])
       }
 
-      if (profissionaisResult.data) {
-        // Verificar se é array ou objeto paginado
-        if (Array.isArray(profissionaisResult.data)) {
-          setProfissionais(profissionaisResult.data)
-        } else if (profissionaisResult.data && typeof profissionaisResult.data === 'object' && 'items' in profissionaisResult.data) {
-          setProfissionais(profissionaisResult.data.items as any[])
-        }
+      // Processar profissionais
+      if (profissionaisResult.data && profissionaisResult.data.data) {
+        setProfissionais(profissionaisResult.data.data)
+      } else {
+        console.warn('Nenhum profissional encontrado:', profissionaisResult.error)
+        setProfissionais([])
       }
 
-      if (servicosResult.data) {
-        // Verificar se é array ou objeto paginado
-        if (Array.isArray(servicosResult.data)) {
-          setServicos(servicosResult.data)
-        } else if (servicosResult.data && typeof servicosResult.data === 'object' && 'items' in servicosResult.data) {
-          setServicos(servicosResult.data.items as Servico[])
-        }
+      // Processar serviços
+      if (servicosResult.data && servicosResult.data.data) {
+        setServicos(servicosResult.data.data)
+      } else {
+        console.warn('Nenhum serviço encontrado:', servicosResult.error)
+        setServicos([])
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
+      // Definir arrays vazios em caso de erro
+      setClientes([])
+      setProfissionais([])
+      setServicos([])
     } finally {
       setLoadingData(false)
     }
@@ -335,17 +336,20 @@ export default function ComandaForm({
                           placeholder="Busque por nome, telefone ou email"
                         />
                       )}
-                      renderOption={(props, option) => (
-                        <Box component="li" {...props}>
-                          <PersonIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                          <Box sx={{ flexGrow: 1 }}>
-                            <Typography variant="body1">{option.nome}</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {option.telefone} {option.email && `• ${option.email}`}
-                            </Typography>
+                      renderOption={(props, option) => {
+                        const { key, ...otherProps } = props;
+                        return (
+                          <Box component="li" key={key} {...otherProps}>
+                            <PersonIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                            <Box sx={{ flexGrow: 1 }}>
+                              <Typography variant="body1">{option.nome}</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {option.telefone} {option.email && `• ${option.email}`}
+                              </Typography>
+                            </Box>
                           </Box>
-                        </Box>
-                      )}
+                        );
+                      }}
                       noOptionsText={loadingData ? "Carregando..." : "Nenhum cliente encontrado"}
                     />
                   )}
@@ -391,7 +395,7 @@ export default function ComandaForm({
                         <MenuItem key={profissional.id} value={profissional.id}>
                           <Box>
                             <Typography variant="body1">
-                              {profissional.usuario?.nome || 'Nome não disponível'}
+                              {profissional.usuario?.nome_completo || 'Nome não disponível'}
                             </Typography>
                             {profissional.especialidades && profissional.especialidades.length > 0 && (
                               <Typography variant="body2" color="text.secondary">
@@ -456,25 +460,27 @@ export default function ComandaForm({
                         
                         return (
                           <ListItem key={index} divider={index < watch('itens').length - 1}>
-                            <ListItemText
-                              primary={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <ServiceIcon sx={{ color: 'primary.main', fontSize: 20 }} />
-                                  <Typography variant="body1" fontWeight="medium">
-                                    {nomeServico}
-                                  </Typography>
-                                  {servicoCadastrado && (
-                                    <Chip 
-                                      label="Cadastrado" 
-                                      size="small" 
-                                      color="primary" 
-                                      variant="outlined" 
-                                    />
-                                  )}
-                                </Box>
-                              }
-                              secondary={
-                                <Box sx={{ mt: 0.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, width: '100%' }}>
+                              {/* Ícone e conteúdo principal */}
+                              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexGrow: 1 }}>
+                                <ServiceIcon sx={{ color: 'primary.main', fontSize: 20, mt: 0.5 }} />
+                                <Box sx={{ flexGrow: 1 }}>
+                                  {/* Nome do serviço */}
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                    <Typography variant="body1" fontWeight="medium">
+                                      {nomeServico}
+                                    </Typography>
+                                    {servicoCadastrado && (
+                                      <Chip 
+                                        label="Cadastrado" 
+                                        size="small" 
+                                        color="primary" 
+                                        variant="outlined" 
+                                      />
+                                    )}
+                                  </Box>
+                                  
+                                  {/* Informações de preço */}
                                   <Typography variant="body2" color="text.secondary">
                                     {item.preco_unitario.toLocaleString('pt-BR', { 
                                       style: 'currency', 
@@ -484,15 +490,17 @@ export default function ComandaForm({
                                       currency: 'BRL' 
                                     })}
                                   </Typography>
+                                  
+                                  {/* Duração do serviço */}
                                   {servicoCadastrado && (
                                     <Typography variant="caption" color="text.secondary">
                                       Duração: {servicoCadastrado.duracao_estimada_minutos}min
                                     </Typography>
                                   )}
                                 </Box>
-                              }
-                            />
-                            <ListItemSecondaryAction>
+                              </Box>
+                              
+                              {/* Botão de deletar */}
                               <IconButton
                                 edge="end"
                                 aria-label="delete"
@@ -502,10 +510,11 @@ export default function ComandaForm({
                                   setValue('itens', newItens)
                                 }}
                                 color="error"
+                                size="small"
                               >
                                 <DeleteIcon />
                               </IconButton>
-                            </ListItemSecondaryAction>
+                            </Box>
                           </ListItem>
                         )
                       })}
@@ -577,9 +586,7 @@ export default function ComandaForm({
         fullWidth
       >
         <DialogTitle>
-          <Typography variant="h6" fontWeight="bold">
-            Adicionar Serviço
-          </Typography>
+          Adicionar Serviço
         </DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1 }}>

@@ -24,7 +24,7 @@ class ItensComandaService extends BaseService {
         produto:id_produto(id, nome, preco_venda, estoque_atual),
         profissional_executante:id_profissional_executante(
           id,
-          usuario:id_usuario(nome)
+          usuario:id_usuario(nome_completo)
         )
       `)
       .eq('id_comanda', comandaId)
@@ -105,7 +105,7 @@ class ItensComandaService extends BaseService {
           produto:id_produto(id, nome, preco_venda),
           profissional_executante:id_profissional_executante(
             id,
-            usuario:id_usuario(nome)
+            usuario:id_usuario(nome_completo)
           )
         `)
         .single()
@@ -176,7 +176,7 @@ class ItensComandaService extends BaseService {
           produto:id_produto(id, nome, preco_venda),
           profissional_executante:id_profissional_executante(
             id,
-            usuario:id_usuario(nome)
+            usuario:id_usuario(nome_completo)
           )
         `)
         .single()

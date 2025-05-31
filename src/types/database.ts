@@ -140,6 +140,8 @@ export interface ItemComanda {
   id_comanda: UUID
   id_servico?: UUID
   id_produto?: UUID
+  nome_servico_avulso?: string
+  descricao_servico_avulso?: string
   quantidade: number
   preco_unitario_registrado: number
   preco_total_item: number

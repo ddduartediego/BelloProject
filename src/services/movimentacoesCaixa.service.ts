@@ -33,7 +33,7 @@ class MovimentacoesCaixaService extends BaseService {
           comanda:id_comanda(id, cliente:id_cliente(nome), nome_cliente_avulso),
           profissional_responsavel:id_profissional_responsavel(
             id,
-            usuario:id_usuario(nome)
+            usuario:id_usuario(nome_completo)
           )
         `)
 
@@ -108,7 +108,7 @@ class MovimentacoesCaixaService extends BaseService {
           comanda:id_comanda(id, cliente:id_cliente(nome), nome_cliente_avulso),
           profissional_responsavel:id_profissional_responsavel(
             id,
-            usuario:id_usuario(nome)
+            usuario:id_usuario(nome_completo)
           )
         `)
         .single()

@@ -4,12 +4,12 @@ import empresaService from './empresa.service'
 
 export interface CreateCaixaData {
   saldo_inicial: number
-  observacoes_abertura?: string
+  observacoes?: string
 }
 
 export interface FecharCaixaData {
-  saldo_final_declarado: number
-  observacoes_fechamento?: string
+  saldo_final_informado: number
+  observacoes?: string
 }
 
 export interface CaixaComMovimentacoes extends Caixa {
@@ -24,7 +24,7 @@ export interface CaixaComMovimentacoes extends Caixa {
   total_entradas?: number
   total_saidas?: number
   saldo_calculado?: number
-  saldo_final_declarado?: number
+  saldo_final_informado?: number
 }
 
 class CaixaService extends BaseService {
@@ -72,7 +72,7 @@ class CaixaService extends BaseService {
           id_comanda,
           profissional_responsavel:id_profissional_responsavel(
             id,
-            usuario:id_usuario(nome)
+            usuario:id_usuario(nome_completo)
           )
         )
       `)
@@ -103,7 +103,7 @@ class CaixaService extends BaseService {
         data_abertura: new Date().toISOString(),
         saldo_inicial: data.saldo_inicial,
         status: 'ABERTO' as StatusCaixa,
-        observacoes_abertura: data.observacoes_abertura,
+        observacoes: data.observacoes,
         criado_em: new Date().toISOString(),
         atualizado_em: new Date().toISOString()
       }
@@ -146,7 +146,7 @@ class CaixaService extends BaseService {
         .reduce((total, mov) => total + mov.valor, 0) || 0
 
       const saldoCalculado = caixa.saldo_inicial + totalEntradas - totalSaidas
-      const diferenca = dados.saldo_final_declarado - saldoCalculado
+      const diferenca = dados.saldo_final_informado - saldoCalculado
 
       // Atualizar caixa
       const { data: caixaFechado, error: updateError } = await this.supabase
@@ -154,10 +154,9 @@ class CaixaService extends BaseService {
         .update({
           status: 'FECHADO' as StatusCaixa,
           data_fechamento: new Date().toISOString(),
-          saldo_final_declarado: dados.saldo_final_declarado,
+          saldo_final_informado: dados.saldo_final_informado,
           saldo_final_calculado: saldoCalculado,
-          diferenca: diferenca,
-          observacoes_fechamento: dados.observacoes_fechamento,
+          observacoes: dados.observacoes,
           atualizado_em: new Date().toISOString()
         })
         .eq('id', id)
@@ -264,8 +263,8 @@ class CaixaService extends BaseService {
             total_entradas: totalEntradas,
             total_saidas: totalSaidas,
             saldo_calculado: saldoCalculado,
-            saldo_declarado: caixa.saldo_final_declarado || 0,
-            diferenca: (caixa.saldo_final_declarado || 0) - saldoCalculado
+            saldo_declarado: caixa.saldo_final_informado || 0,
+            diferenca: (caixa.saldo_final_informado || 0) - saldoCalculado
           },
           movimentacoes_por_tipo: {
             vendas: {

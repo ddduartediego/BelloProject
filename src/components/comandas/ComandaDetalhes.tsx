@@ -269,10 +269,10 @@ export default function ComandaDetalhes({
   onUpdateComanda 
 }: ComandaDetalhesProps) {
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false)
+  const [discountDialogOpen, setDiscountDialogOpen] = useState(false)
+  const [discountValue, setDiscountValue] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [discountDialogOpen, setDiscountDialogOpen] = useState(false)
-  const [discountValue, setDiscountValue] = useState<number>(comanda.valor_desconto || 0)
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', {
@@ -311,11 +311,8 @@ export default function ComandaDetalhes({
     }
   }
 
-  // Cálculos da comanda
-  const subtotal = comanda.itens?.reduce((acc, item) => {
-    return acc + (item.preco_total_item || 0)
-  }, 0) || 0
-
+  // Cálculos financeiros
+  const subtotal = comanda.valor_total_servicos + comanda.valor_total_produtos
   const valorDesconto = comanda.valor_desconto || 0
   const total = subtotal - valorDesconto
 
@@ -437,7 +434,7 @@ export default function ComandaDetalhes({
                     <strong>Cliente:</strong> {comanda.cliente?.nome || comanda.nome_cliente_avulso || 'Cliente não identificado'}
                   </Typography>
                   <Typography variant="body2">
-                    <strong>Profissional:</strong> {(comanda.profissional_responsavel as any)?.nome || (comanda.profissional_responsavel as any)?.usuario?.nome || 'Profissional não identificado'}
+                    <strong>Profissional:</strong> {(comanda.profissional_responsavel as any)?.usuario_responsavel?.nome_completo || 'Profissional não identificado'}
                   </Typography>
                   <Typography variant="body2">
                     <strong>Data de Abertura:</strong> {formatDateTime(comanda.data_abertura)}
@@ -532,21 +529,43 @@ export default function ComandaDetalhes({
                     <TableRow key={item.id}>
                       <TableCell>
                         <Box>
-                          <Typography variant="body2" fontWeight="bold">
-                            {item.servico?.nome || item.produto?.nome || 'Item não identificado'}
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" fontWeight="bold">
+                              {item.nome_servico_avulso || item.servico?.nome || item.produto?.nome || 'Item não identificado'}
+                            </Typography>
+                            {item.nome_servico_avulso && (
+                              <Chip 
+                                label="Avulso" 
+                                size="small" 
+                                color="warning" 
+                                variant="outlined"
+                              />
+                            )}
+                          </Box>
                           {item.profissional_executante && (
                             <Typography variant="caption" color="text.secondary">
-                              Executante: {(item.profissional_executante as any)?.nome || (item.profissional_executante as any)?.usuario?.nome || 'Profissional não identificado'}
+                              Executante: {(item.profissional_executante as any)?.usuario_executante?.nome_completo || 'Profissional não identificado'}
                             </Typography>
                           )}
                         </Box>
                       </TableCell>
                       <TableCell align="center">
                         <Chip 
-                          label={item.servico ? 'Serviço' : 'Produto'} 
+                          label={
+                            item.nome_servico_avulso 
+                              ? 'Serviço Avulso' 
+                              : item.servico 
+                                ? 'Serviço' 
+                                : 'Produto'
+                          } 
                           size="small"
-                          color={item.servico ? 'primary' : 'secondary'}
+                          color={
+                            item.nome_servico_avulso 
+                              ? 'warning' 
+                              : item.servico 
+                                ? 'primary' 
+                                : 'secondary'
+                          }
                           variant="outlined"
                         />
                       </TableCell>
