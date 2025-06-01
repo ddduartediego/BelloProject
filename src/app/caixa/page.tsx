@@ -583,7 +583,7 @@ export default function CaixaPage() {
                       fontWeight="bold"
                       color={mov.valor > 0 ? 'success.main' : 'error.main'}
                     >
-                      {mov.valor > 0 ? '+' : ''} R$ {Math.abs(mov.valor).toFixed(2).replace('.', ',')}
+                      {mov.valor > 0 ? '+' : '-'} R$ {Math.abs(mov.valor).toFixed(2).replace('.', ',')}
                     </Typography>
                   </Box>
                   {index < movimentacoes.length - 1 && <Divider />}
