@@ -40,10 +40,13 @@ import {
   movimentacoesCaixaService
 } from '@/services'
 import type { Caixa, MovimentacaoCaixa } from '@/types/database'
+import { useClientSide } from '@/hooks/useClientSide'
+import { formatDate, formatDateTime, formatTime } from '@/utils/dateFormat'
 
 export default function CaixaPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const isClientSide = useClientSide()
   
   const [caixaAtivo, setCaixaAtivo] = useState<Caixa | null>(null)
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoCaixa[]>([])
@@ -393,14 +396,11 @@ export default function CaixaPage() {
                 <Typography variant="body2" color="text.secondary">
                   Data de Abertura
                 </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {new Date(caixaAtivo.data_abertura).toLocaleDateString('pt-BR')}
+                <Typography variant="body1" fontWeight="medium" suppressHydrationWarning>
+                  {formatDate(caixaAtivo.data_abertura, isClientSide)}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {new Date(caixaAtivo.data_abertura).toLocaleTimeString('pt-BR', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
+                <Typography variant="caption" color="text.secondary" suppressHydrationWarning>
+                  {formatTime(caixaAtivo.data_abertura, isClientSide)}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -573,8 +573,8 @@ export default function CaixaPage() {
                         <Typography variant="body1" fontWeight="medium">
                           {getDescricaoMovimentacao(mov)}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(mov.criado_em).toLocaleString('pt-BR')} • {mov.tipo_movimentacao}
+                        <Typography variant="caption" color="text.secondary" suppressHydrationWarning>
+                          {formatDateTime(mov.criado_em, isClientSide)} • {mov.tipo_movimentacao}
                         </Typography>
                       </Box>
                     </Box>
