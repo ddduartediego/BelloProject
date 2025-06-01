@@ -5,6 +5,8 @@ export interface CreateItemComandaData {
   id_comanda: string
   id_servico?: string
   id_produto?: string
+  nome_servico_avulso?: string
+  preco_unitario?: number
   quantidade: number
   id_profissional_executante?: string
 }
@@ -35,18 +37,24 @@ class ItensComandaService extends BaseService {
 
   async create(data: CreateItemComandaData): Promise<ServiceResponse<ItemComanda>> {
     try {
-      // Validar que é serviço OU produto, não ambos
-      if ((data.id_servico && data.id_produto) || (!data.id_servico && !data.id_produto)) {
+      // Determinar tipo de item e validar
+      const isServicoAvulso = !!data.nome_servico_avulso
+      const isServicoCadastrado = !!data.id_servico
+      const isProduto = !!data.id_produto
+      
+      // Validar que é apenas um tipo
+      const tiposCount = [isServicoAvulso, isServicoCadastrado, isProduto].filter(Boolean).length
+      if (tiposCount !== 1) {
         return {
           data: null,
-          error: 'Item deve ser um serviço OU um produto'
+          error: 'Item deve ser um serviço cadastrado, produto ou serviço avulso'
         }
       }
 
       let precoUnitario = 0
       
       // Se for produto, validar estoque e buscar preço
-      if (data.id_produto) {
+      if (isProduto) {
         const { data: produto, error: produtoError } = await this.supabase
           .from('produto')
           .select('preco_venda, estoque_atual')
@@ -70,8 +78,8 @@ class ItensComandaService extends BaseService {
         precoUnitario = produto.preco_venda
       }
 
-      // Se for serviço, buscar preço
-      if (data.id_servico) {
+      // Se for serviço cadastrado, buscar preço
+      if (isServicoCadastrado) {
         const { data: servico, error: servicoError } = await this.supabase
           .from('servico')
           .select('preco')
@@ -88,8 +96,25 @@ class ItensComandaService extends BaseService {
         precoUnitario = servico.preco
       }
 
+      // Se for serviço avulso, usar preço fornecido
+      if (isServicoAvulso) {
+        if (!data.preco_unitario || data.preco_unitario <= 0) {
+          return {
+            data: null,
+            error: 'Preço avulso inválido'
+          }
+        }
+        precoUnitario = data.preco_unitario
+      }
+
       const itemData = {
-        ...data,
+        id_comanda: data.id_comanda,
+        id_servico: data.id_servico || null,
+        id_produto: data.id_produto || null,
+        nome_servico_avulso: data.nome_servico_avulso || null,
+        descricao_servico_avulso: data.nome_servico_avulso ? 'Serviço avulso' : null,
+        quantidade: data.quantidade,
+        id_profissional_executante: data.id_profissional_executante || null,
         preco_unitario_registrado: precoUnitario,
         preco_total_item: precoUnitario * data.quantidade,
         criado_em: new Date().toISOString(),
@@ -111,7 +136,7 @@ class ItensComandaService extends BaseService {
         .single()
 
       const result = await this.handleRequest(query)
-
+      
       // Se item foi criado com sucesso, atualizar totais da comanda
       if (result.data) {
         await this.atualizarTotaisComanda(data.id_comanda)

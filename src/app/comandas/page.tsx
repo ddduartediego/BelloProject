@@ -339,6 +339,35 @@ export default function ComandasPage() {
     }
   }
 
+  // Função para atualizar comanda selecionada após modificações
+  const handleUpdateComanda = async () => {
+    if (!selectedComanda) return
+    
+    try {
+      // Buscar comanda atualizada
+      const { data: comandaAtualizada, error } = await comandasService.getById(selectedComanda.id)
+      
+      if (error) {
+        console.error('Erro ao buscar comanda:', error)
+        showSnackbar('Erro ao atualizar comanda: ' + error, 'error')
+        return
+      }
+      
+      if (comandaAtualizada) {
+        // Atualizar selectedComanda
+        setSelectedComanda(comandaAtualizada)
+        
+        // Atualizar na lista também
+        setComandas(prev => prev.map(c => 
+          c.id === selectedComanda.id ? comandaAtualizada : c
+        ))
+      }
+    } catch (error) {
+      console.error('Erro inesperado ao atualizar comanda:', error)
+      showSnackbar('Erro inesperado ao atualizar comanda', 'error')
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ABERTA':
@@ -494,10 +523,7 @@ export default function ComandasPage() {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                       <Box sx={{ flex: 1 }}>
                         <Typography variant="h6" fontWeight="bold" gutterBottom>
-                          #{comanda.id.slice(-8).toUpperCase()}
-                        </Typography>
-                        <Typography variant="body1" color="text.secondary">
-                          {comanda.cliente?.nome || comanda.nome_cliente_avulso}
+                          {comanda.cliente?.nome || comanda.nome_cliente_avulso || 'Cliente não identificado'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           Profissional: {(comanda.profissional_responsavel as any)?.usuario_responsavel?.nome_completo || 'Não identificado'}
@@ -518,13 +544,37 @@ export default function ComandasPage() {
                     </Box>
 
                     <Stack spacing={1} sx={{ mb: 2 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2">Itens:</Typography>
-                        <Typography variant="body2">{comanda.itens?.length || 0}</Typography>
+                      {/* Seção de Itens melhorada */}
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium" gutterBottom>
+                          Itens ({comanda.itens?.length || 0}):
+                        </Typography>
+                        {comanda.itens && comanda.itens.length > 0 ? (
+                          <Box sx={{ ml: 1 }}>
+                            {comanda.itens.slice(0, 3).map((item, index) => (
+                              <Typography key={item.id} variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                                • {item.quantidade}x {item.nome_servico_avulso || item.servico?.nome || item.produto?.nome || 'Item'} - 
+                                <Typography component="span" fontWeight="medium" color="primary.main" sx={{ ml: 0.5 }}>
+                                  R$ {item.preco_total_item?.toFixed(2).replace('.', ',') || '0,00'}
+                                </Typography>
+                              </Typography>
+                            ))}
+                            {comanda.itens.length > 3 && (
+                              <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                                ... e mais {comanda.itens.length - 3} item(s)
+                              </Typography>
+                            )}
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary" sx={{ ml: 1, fontStyle: 'italic' }}>
+                            Nenhum item adicionado
+                          </Typography>
+                        )}
                       </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2">Total:</Typography>
-                        <Typography variant="body2" fontWeight="bold" color="primary">
+                      
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                        <Typography variant="body2" fontWeight="medium">Total:</Typography>
+                        <Typography variant="body2" fontWeight="bold" color="success.main" fontSize="1rem">
                           R$ {(comanda.valor_total_servicos + comanda.valor_total_produtos - comanda.valor_desconto).toFixed(2).replace('.', ',')}
                         </Typography>
                       </Box>
@@ -581,7 +631,7 @@ export default function ComandasPage() {
             open={comandaDetalhesOpen}
             onClose={() => setComandaDetalhesOpen(false)}
             onFinishComanda={handleFinishComanda}
-            onUpdateComanda={() => carregarComandas()}
+            onUpdateComanda={handleUpdateComanda}
           />
         )}
 

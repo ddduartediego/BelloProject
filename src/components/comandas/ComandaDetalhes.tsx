@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -45,6 +45,7 @@ import {
   servicosService, 
   type CreateItemComandaData 
 } from '@/services'
+import { createClient } from '@/lib/supabase'
 
 interface ComandaDetalhesProps {
   comanda: ComandaComDetalhes
@@ -54,34 +55,60 @@ interface ComandaDetalhesProps {
   onUpdateComanda: () => void
 }
 
+// Atualizar interface CreateItemComandaData para incluir serviços avulsos
+interface CreateItemComandaDataLocal {
+  id_comanda: string
+  id_servico?: string
+  id_produto?: string
+  nome_servico_avulso?: string
+  preco_unitario?: number
+  quantidade: number
+  id_profissional_executante?: string
+}
+
 // Componente para adicionar itens
 interface AddItemDialogProps {
   open: boolean
   onClose: () => void
-  onAdd: (item: CreateItemComandaData) => void
+  onAdd: (item: CreateItemComandaDataLocal) => void
   comandaId: string
   loading: boolean
 }
 
 function AddItemDialog({ open, onClose, onAdd, comandaId, loading }: AddItemDialogProps) {
   const [tipoItem, setTipoItem] = useState<'servico' | 'produto'>('servico')
+  const [tipoServico, setTipoServico] = useState<'cadastrado' | 'avulso'>('cadastrado')
   const [servicos, setServicos] = useState<Servico[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [selectedItem, setSelectedItem] = useState<string>('')
+  const [nomeServicoAvulso, setNomeServicoAvulso] = useState<string>('')
+  const [precoAvulso, setPrecoAvulso] = useState<number>(0)
   const [quantidade, setQuantidade] = useState<number>(1)
   const [loadingData, setLoadingData] = useState(false)
 
-  // Carregar serviços quando abrir o dialog
+  // Carregar serviços e produtos quando abrir o dialog
   useEffect(() => {
     if (open) {
-      carregarServicos()
+      carregarDados()
     }
   }, [open])
 
+  const carregarDados = async () => {
+    setLoadingData(true)
+    try {
+      await Promise.all([
+        carregarServicos(),
+        carregarProdutos()
+      ])
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+    } finally {
+      setLoadingData(false)
+    }
+  }
+
   const carregarServicos = async () => {
     try {
-      setLoadingData(true)
-      
       const response = await servicosService.getAll(
         { page: 1, limit: 100 },
         {}
@@ -98,50 +125,94 @@ function AddItemDialog({ open, onClose, onAdd, comandaId, loading }: AddItemDial
         // Tratar tanto array quanto objeto paginado
         if (Array.isArray(data)) {
           setServicos(data)
-        } else if (data && typeof data === 'object' && 'items' in data) {
-          setServicos(data.items as Servico[])
+        } else if (data && typeof data === 'object' && 'data' in data) {
+          setServicos(data.data as Servico[])
         }
       }
     } catch (error) {
       console.error('Erro ao carregar serviços:', error)
-    } finally {
-      setLoadingData(false)
+    }
+  }
+
+  const carregarProdutos = async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('produto')
+        .select('*')
+        .order('nome')
+      
+      if (error) {
+        console.error('Erro ao carregar produtos:', error)
+        return
+      }
+      
+      setProdutos((data || []) as Produto[])
+      
+    } catch (error) {
+      console.error('Erro ao carregar produtos:', error)
     }
   }
 
   const handleSubmit = () => {
-    if (!selectedItem) return
+    // Validações por tipo
+    if (tipoItem === 'servico' && tipoServico === 'cadastrado' && !selectedItem) {
+      return
+    }
+    if (tipoItem === 'produto' && !selectedItem) {
+      return  
+    }
+    if (tipoItem === 'servico' && tipoServico === 'avulso' && (!nomeServicoAvulso.trim() || precoAvulso <= 0)) {
+      return
+    }
 
-    const itemData: CreateItemComandaData = {
+    const itemData: CreateItemComandaDataLocal = {
       id_comanda: comandaId,
       quantidade,
-      ...(tipoItem === 'servico' ? { id_servico: selectedItem } : { id_produto: selectedItem })
+      ...(tipoItem === 'servico' && tipoServico === 'cadastrado' && { id_servico: selectedItem }),
+      ...(tipoItem === 'produto' && { id_produto: selectedItem }),
+      ...(tipoItem === 'servico' && tipoServico === 'avulso' && { 
+        nome_servico_avulso: nomeServicoAvulso,
+        preco_unitario: precoAvulso 
+      })
     }
 
     onAdd(itemData)
     
     // Reset form
     setSelectedItem('')
+    setNomeServicoAvulso('')
+    setPrecoAvulso(0)
     setQuantidade(1)
+    setTipoServico('cadastrado')
     onClose()
   }
 
   const handleClose = () => {
     setSelectedItem('')
+    setNomeServicoAvulso('')
+    setPrecoAvulso(0)
     setQuantidade(1)
+    setTipoServico('cadastrado')
     onClose()
   }
 
   const itemOptions = tipoItem === 'servico' ? servicos : produtos
-  const selectedItemData = tipoItem === 'servico' 
-    ? servicos.find(item => item.id === selectedItem)
-    : produtos.find(item => item.id === selectedItem)
+  const selectedItemData = useMemo(() => {
+    if (tipoItem === 'servico' && tipoServico === 'cadastrado' && selectedItem) {
+      return servicos.find(s => s.id === selectedItem)
+    }
+    if (tipoItem === 'produto' && selectedItem) {
+      return produtos.find(p => p.id === selectedItem)
+    }
+    return null
+  }, [tipoItem, tipoServico, selectedItem, servicos, produtos])
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Adicionar Item à Comanda</DialogTitle>
-      <DialogContent sx={{ pt: 2 }}>
-        <Grid container spacing={2}>
+      <DialogContent>
+        <Grid container spacing={3} sx={{ mt: 1 }}>
           <Grid item xs={12}>
             <FormControl fullWidth>
               <InputLabel>Tipo de Item</InputLabel>
@@ -156,8 +227,25 @@ function AddItemDialog({ open, onClose, onAdd, comandaId, loading }: AddItemDial
             </FormControl>
           </Grid>
 
+          {/* Tipo de Serviço - só aparece se for serviço */}
+          {tipoItem === 'servico' && (
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Tipo de Serviço</InputLabel>
+                <Select
+                  value={tipoServico}
+                  label="Tipo de Serviço"
+                  onChange={(e) => setTipoServico(e.target.value as 'cadastrado' | 'avulso')}
+                >
+                  <MenuItem value="cadastrado">Serviço Cadastrado</MenuItem>
+                  <MenuItem value="avulso">Serviço Avulso</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          )}
+
           <Grid item xs={12}>
-            {tipoItem === 'servico' ? (
+            {tipoItem === 'servico' && tipoServico === 'cadastrado' ? (
               <Autocomplete
                 options={servicos}
                 getOptionLabel={(option) => option.nome}
@@ -171,19 +259,48 @@ function AddItemDialog({ open, onClose, onAdd, comandaId, loading }: AddItemDial
                     required
                   />
                 )}
-                renderOption={(props, option) => (
-                  <Box component="li" {...props}>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body1">{option.nome}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        R$ {option.preco.toFixed(2).replace('.', ',')}
-                      </Typography>
+                renderOption={(props, option) => {
+                  const { key, ...otherProps } = props
+                  return (
+                    <Box component="li" key={key} {...otherProps}>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Typography variant="body1">{option.nome}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          R$ {option.preco.toFixed(2).replace('.', ',')}
+                        </Typography>
+                      </Box>
                     </Box>
-                  </Box>
-                )}
+                  )
+                }}
                 noOptionsText={loadingData ? "Carregando..." : "Nenhum serviço encontrado"}
               />
-            ) : (
+            ) : tipoItem === 'servico' && tipoServico === 'avulso' ? (
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Nome do Serviço Avulso"
+                    value={nomeServicoAvulso}
+                    onChange={(e) => setNomeServicoAvulso(e.target.value)}
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Preço do Serviço Avulso"
+                    type="number"
+                    value={precoAvulso}
+                    onChange={(e) => setPrecoAvulso(Math.max(0, parseFloat(e.target.value) || 0))}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    InputProps={{
+                      startAdornment: <Typography sx={{ mr: 1 }}>R$</Typography>
+                    }}
+                    required
+                  />
+                </Grid>
+              </Grid>
+            ) : tipoItem === 'produto' ? (
               <Autocomplete
                 options={produtos}
                 getOptionLabel={(option) => option.nome}
@@ -197,19 +314,22 @@ function AddItemDialog({ open, onClose, onAdd, comandaId, loading }: AddItemDial
                     required
                   />
                 )}
-                renderOption={(props, option) => (
-                  <Box component="li" {...props}>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body1">{option.nome}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        R$ {(option as any).preco_venda?.toFixed(2).replace('.', ',')} - Estoque: {(option as any).estoque_atual}
-                      </Typography>
+                renderOption={(props, option) => {
+                  const { key, ...otherProps } = props
+                  return (
+                    <Box component="li" key={key} {...otherProps}>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Typography variant="body1">{option.nome}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          R$ {(option as any).preco_venda?.toFixed(2).replace('.', ',')} - Estoque: {(option as any).estoque_atual}
+                        </Typography>
+                      </Box>
                     </Box>
-                  </Box>
-                )}
+                  )
+                }}
                 noOptionsText={loadingData ? "Carregando..." : "Nenhum produto encontrado"}
               />
-            )}
+            ) : null}
           </Grid>
 
           <Grid item xs={12}>
@@ -224,22 +344,27 @@ function AddItemDialog({ open, onClose, onAdd, comandaId, loading }: AddItemDial
             />
           </Grid>
 
-          {selectedItemData && (
+          {/* Resumo do item - só aparece quando há dados válidos */}
+          {(selectedItemData || (tipoItem === 'servico' && tipoServico === 'avulso' && nomeServicoAvulso && precoAvulso > 0)) && (
             <Grid item xs={12}>
               <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                <Typography variant="h6" gutterBottom>{selectedItemData.nome}</Typography>
+                <Typography variant="h6" gutterBottom>
+                  {tipoItem === 'servico' && tipoServico === 'avulso' ? nomeServicoAvulso : selectedItemData?.nome}
+                </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Preço unitário: R$ {(tipoItem === 'servico' 
-                    ? (selectedItemData as Servico).preco 
-                    : (selectedItemData as any).preco_venda
-                  )?.toFixed(2).replace('.', ',')}
-                </Typography>
-                <Typography variant="body1" fontWeight="bold" color="primary">
-                  Total: R$ {((tipoItem === 'servico' 
-                    ? (selectedItemData as Servico).preco 
-                    : (selectedItemData as any).preco_venda
-                  ) * quantidade)?.toFixed(2).replace('.', ',')}
-                </Typography>
+                  Preço unitário: R$ {(tipoItem === 'servico' && tipoServico === 'avulso'
+                    ? precoAvulso 
+                    : tipoItem === 'servico' 
+                      ? (selectedItemData as Servico).preco 
+                      : (selectedItemData as any).preco_venda
+                  )?.toFixed(2).replace('.', ',')}</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 'medium', mt: 1 }}>
+                  Total: R$ {((tipoItem === 'servico' && tipoServico === 'avulso'
+                    ? precoAvulso 
+                    : tipoItem === 'servico' 
+                      ? (selectedItemData as Servico).preco 
+                      : (selectedItemData as any).preco_venda
+                  ) * quantidade).toFixed(2).replace('.', ',')}</Typography>
               </Paper>
             </Grid>
           )}
@@ -250,7 +375,13 @@ function AddItemDialog({ open, onClose, onAdd, comandaId, loading }: AddItemDial
         <Button
           onClick={handleSubmit}
           variant="contained"
-          disabled={!selectedItem || loading || loadingData}
+          disabled={
+            (tipoItem === 'servico' && tipoServico === 'cadastrado' && !selectedItem) ||
+            (tipoItem === 'produto' && !selectedItem) ||
+            (tipoItem === 'servico' && tipoServico === 'avulso' && (!nomeServicoAvulso.trim() || precoAvulso <= 0)) ||
+            loading || 
+            loadingData
+          }
           startIcon={loading ? <CircularProgress size={20} /> : <AddIcon />}
         >
           {loading ? 'Adicionando...' : 'Adicionar'}
@@ -317,7 +448,7 @@ export default function ComandaDetalhes({
   const total = subtotal - valorDesconto
 
   // Função para adicionar item
-  const handleAddItem = async (itemData: CreateItemComandaData) => {
+  const handleAddItem = async (itemData: CreateItemComandaDataLocal) => {
     setLoading(true)
     setError(null)
     
@@ -390,16 +521,11 @@ export default function ComandaDetalhes({
     }
   }
 
-  const handleClose = () => {
-    setError(null)
-    onClose()
-  }
-
   return (
     <>
       <Dialog
         open={open}
-        onClose={handleClose}
+        onClose={onClose}
         maxWidth="lg"
         fullWidth
         PaperProps={{
@@ -409,9 +535,9 @@ export default function ComandaDetalhes({
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h5" fontWeight="bold">
-              Comanda #{comanda.id.slice(-8).toUpperCase()}
+              Cliente: {comanda.cliente?.nome || comanda.nome_cliente_avulso || 'Cliente não identificado'}
             </Typography>
-            <IconButton onClick={handleClose}>
+            <IconButton onClick={onClose}>
               <CloseIcon />
             </IconButton>
           </Box>
@@ -431,7 +557,7 @@ export default function ComandaDetalhes({
                 <Typography variant="h6" gutterBottom>Informações da Comanda</Typography>
                 <Stack spacing={1}>
                   <Typography variant="body2">
-                    <strong>Cliente:</strong> {comanda.cliente?.nome || comanda.nome_cliente_avulso || 'Cliente não identificado'}
+                    <strong>ID da Comanda:</strong> #{comanda.id.slice(-8).toUpperCase()}
                   </Typography>
                   <Typography variant="body2">
                     <strong>Profissional:</strong> {(comanda.profissional_responsavel as any)?.usuario_responsavel?.nome_completo || 'Profissional não identificado'}
@@ -606,7 +732,7 @@ export default function ComandaDetalhes({
         </DialogContent>
 
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={handleClose} variant="outlined">
+          <Button onClick={onClose} variant="outlined">
             Fechar
           </Button>
           {comanda.status === 'ABERTA' && (
