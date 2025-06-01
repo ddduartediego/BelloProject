@@ -189,7 +189,7 @@ class MovimentacoesCaixaService extends BaseService {
     return this.create({
       id_caixa: caixaId,
       tipo_movimentacao: 'SANGRIA',
-      valor: -Math.abs(valor), // Sempre negativo para representar saída
+      valor: Math.abs(valor), // Valor sempre positivo no banco
       descricao: descricao || 'Sangria',
       id_profissional_responsavel: profissionalId
     })
@@ -270,9 +270,9 @@ class MovimentacoesCaixaService extends BaseService {
             break
           case 'SAIDA':
           case 'SANGRIA':
-            acc.total_saidas += Math.abs(mov.valor)
+            acc.total_saidas += mov.valor
             if (mov.tipo_movimentacao === 'SANGRIA') {
-              acc.total_sangrias += Math.abs(mov.valor)
+              acc.total_sangrias += mov.valor
             }
             break
         }
