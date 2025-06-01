@@ -143,7 +143,7 @@ class CaixaService extends BaseService {
 
       const totalSaidas = caixa.movimentacoes
         ?.filter(mov => mov.tipo_movimentacao === 'SAIDA' || mov.tipo_movimentacao === 'SANGRIA')
-        .reduce((total, mov) => total + mov.valor, 0) || 0
+        .reduce((total, mov) => total + Math.abs(mov.valor), 0) || 0
 
       const saldoCalculado = caixa.saldo_inicial + totalEntradas - totalSaidas
       const diferenca = dados.saldo_final_informado - saldoCalculado
@@ -252,7 +252,7 @@ class CaixaService extends BaseService {
       )
 
       const totalEntradas = [...vendas, ...reforcos].reduce((total, mov) => total + mov.valor, 0)
-      const totalSaidas = [...sangrias, ...outrasSaidas].reduce((total, mov) => total + mov.valor, 0)
+      const totalSaidas = [...sangrias, ...outrasSaidas].reduce((total, mov) => total + Math.abs(mov.valor), 0)
       const saldoCalculado = caixa.saldo_inicial + totalEntradas - totalSaidas
 
       return {
@@ -277,11 +277,11 @@ class CaixaService extends BaseService {
             },
             sangrias: {
               quantidade: sangrias.length,
-              valor: sangrias.reduce((total, mov) => total + mov.valor, 0)
+              valor: Math.abs(sangrias.reduce((total, mov) => total + mov.valor, 0))
             },
             outras_saidas: {
               quantidade: outrasSaidas.length,
-              valor: outrasSaidas.reduce((total, mov) => total + mov.valor, 0)
+              valor: Math.abs(outrasSaidas.reduce((total, mov) => total + mov.valor, 0))
             }
           }
         },
