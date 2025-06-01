@@ -251,14 +251,14 @@ export default function CaixaPage() {
           caixaAtivo.id, 
           valor, 
           descricao, 
-          'user-default' // TODO: pegar do usuário logado
+          undefined // Sem profissional responsável por enquanto
         )
       } else {
         result = await movimentacoesCaixaService.criarSangria(
           caixaAtivo.id, 
           valor, 
           descricao, 
-          'user-default' // TODO: pegar do usuário logado
+          undefined // Sem profissional responsável por enquanto
         )
       }
       
@@ -293,6 +293,18 @@ export default function CaixaPage() {
   // Cálculos
   const saldoCalculado = caixaAtivo ? 
     caixaAtivo.saldo_inicial + estatisticas.totalEntradas - estatisticas.totalSaidas : 0
+
+  const getDescricaoMovimentacao = (mov: MovimentacaoCaixa) => {
+    // Se for uma movimentação de comanda (venda), exibir o nome do cliente
+    if (mov.id_comanda && (mov as any).comanda) {
+      const comanda = (mov as any).comanda
+      const nomeCliente = comanda?.cliente?.nome || comanda?.nome_cliente_avulso
+      if (nomeCliente) {
+        return `Venda - ${nomeCliente}`
+      }
+    }
+    return mov.descricao
+  }
 
   if (initialLoading) {
     return (
@@ -559,7 +571,7 @@ export default function CaixaPage() {
                       )}
                       <Box>
                         <Typography variant="body1" fontWeight="medium">
-                          {mov.descricao}
+                          {getDescricaoMovimentacao(mov)}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           {new Date(mov.criado_em).toLocaleString('pt-BR')} • MOVIMENTACAO
