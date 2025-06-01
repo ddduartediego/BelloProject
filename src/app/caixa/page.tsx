@@ -564,7 +564,7 @@ export default function CaixaPage() {
                     py: 2
                   }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      {(mov.tipo_movimentacao === 'ENTRADA' || mov.tipo_movimentacao === 'REFORCO') ? (
+                      {mov.valor > 0 ? (
                         <EntradaIcon sx={{ color: 'success.main' }} />
                       ) : (
                         <SaidaIcon sx={{ color: 'error.main' }} />
@@ -574,16 +574,16 @@ export default function CaixaPage() {
                           {getDescricaoMovimentacao(mov)}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {new Date(mov.criado_em).toLocaleString('pt-BR')} • MOVIMENTACAO
+                          {new Date(mov.criado_em).toLocaleString('pt-BR')} • {mov.tipo_movimentacao}
                         </Typography>
                       </Box>
                     </Box>
                     <Typography 
                       variant="h6" 
                       fontWeight="bold"
-                      color={(mov.tipo_movimentacao === 'ENTRADA' || mov.tipo_movimentacao === 'REFORCO') ? 'success.main' : 'error.main'}
+                      color={mov.valor > 0 ? 'success.main' : 'error.main'}
                     >
-                      {(mov.tipo_movimentacao === 'ENTRADA' || mov.tipo_movimentacao === 'REFORCO') ? '+' : '-'} R$ {mov.valor.toFixed(2).replace('.', ',')}
+                      {mov.valor > 0 ? '+' : ''} R$ {Math.abs(mov.valor).toFixed(2).replace('.', ',')}
                     </Typography>
                   </Box>
                   {index < movimentacoes.length - 1 && <Divider />}
