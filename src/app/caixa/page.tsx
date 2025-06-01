@@ -139,24 +139,33 @@ export default function CaixaPage() {
   // Carregar estatísticas do caixa
   const carregarEstatisticas = async (caixaId: string) => {
     try {
-      const dataHoje = new Date().toISOString().split('T')[0]
-      const { data, error } = await movimentacoesCaixaService.getRelatorioPeriodo(
-        caixaId, 
-        dataHoje, 
-        dataHoje
-      )
+      // Buscar todas as movimentações do caixa, não apenas do dia atual
+      const { data, error } = await movimentacoesCaixaService.getByCaixa(caixaId)
       
       if (error) {
         console.error('Erro ao carregar estatísticas:', error)
         return
       }
       
-      if (data && data.resumo) {
+      if (data) {
+        // Calcular estatísticas com base em todas as movimentações
+        const totalEntradas = data
+          .filter(mov => mov.tipo_movimentacao === 'ENTRADA' || mov.tipo_movimentacao === 'REFORCO')
+          .reduce((total, mov) => total + mov.valor, 0)
+        
+        const totalSaidas = data
+          .filter(mov => mov.tipo_movimentacao === 'SAIDA' || mov.tipo_movimentacao === 'SANGRIA')
+          .reduce((total, mov) => total + Math.abs(mov.valor), 0)
+        
+        const totalVendas = data
+          .filter(mov => mov.tipo_movimentacao === 'ENTRADA' && mov.id_comanda)
+          .reduce((total, mov) => total + mov.valor, 0)
+        
         setEstatisticas({
-          totalEntradas: data.resumo.total_entradas || 0,
-          totalSaidas: data.resumo.total_saidas || 0,
-          totalVendas: data.resumo.total_vendas || 0,
-          totalMovimentacoes: data.resumo.quantidade_movimentacoes || 0
+          totalEntradas,
+          totalSaidas,
+          totalVendas,
+          totalMovimentacoes: data.length
         })
       }
       
