@@ -48,6 +48,7 @@ interface FecharCaixaDialogProps {
   onConfirm: (observacoes?: string) => void
   caixa: Caixa | null
   saldoCalculado: number
+  saldoInicial?: number
   totalEntradas: number
   totalSaidas: number
   loading?: boolean
@@ -59,6 +60,7 @@ export default function FecharCaixaDialog({
   onConfirm,
   caixa,
   saldoCalculado,
+  saldoInicial,
   totalEntradas,
   totalSaidas,
   loading = false
@@ -99,6 +101,20 @@ export default function FecharCaixaDialog({
   }, [open, caixa, saldoCalculado, reset])
 
   if (!caixa) return null
+
+  // 🔍 DEBUG: Log dos valores recebidos pelo modal
+  console.log('🔍 DEBUG FECHAR CAIXA MODAL - Valores recebidos:', {
+    caixa: {
+      id: caixa.id,
+      saldo_inicial: caixa.saldo_inicial,
+      status: caixa.status
+    },
+    saldoCalculado,
+    saldoInicial,
+    saldoInicialUsado: saldoInicial !== undefined ? saldoInicial : caixa.saldo_inicial,
+    totalEntradas,
+    totalSaidas
+  })
 
   const getSeverityDiferenca = () => {
     if (Math.abs(diferenca) <= 0.01) return 'success' // Considera diferenças mínimas como corretas
@@ -158,7 +174,7 @@ export default function FecharCaixaDialog({
                     Saldo Inicial
                   </Typography>
                   <Typography variant="h6" color="primary.main">
-                    R$ {caixa.saldo_inicial.toFixed(2).replace('.', ',')}
+                    R$ {(saldoInicial !== undefined ? saldoInicial : caixa.saldo_inicial).toFixed(2).replace('.', ',')}
                   </Typography>
                 </Box>
               </Grid>

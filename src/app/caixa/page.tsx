@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Typography,
@@ -42,6 +42,7 @@ import {
   movimentacoesCaixaService
 } from '@/services'
 import type { Caixa, MovimentacaoCaixa } from '@/types/database'
+import type { CaixaFiltro } from '@/types/filtros'
 import { useClientSide } from '@/hooks/useClientSide'
 import { formatDate, formatDateTime, formatTime } from '@/utils/dateFormat'
 import { useCaixas } from '@/hooks/useCaixas'
@@ -77,6 +78,10 @@ export default function CaixaPage() {
     message: '',
     severity: 'success'
   })
+
+  // Estados para cache de dados completos de caixas
+  const [caixasCompletosCache, setCaixasCompletosCache] = useState<Map<string, Caixa>>(new Map())
+  const [caixaCompletoParaEdicao, setCaixaCompletoParaEdicao] = useState<Caixa | null>(null)
 
   // Hook para gerenciar caixas
   const {
@@ -209,17 +214,110 @@ export default function CaixaPage() {
           .filter(mov => mov.tipo_movimentacao === 'ENTRADA' && mov.id_comanda)
           .reduce((total, mov) => total + mov.valor, 0)
         
-        setEstatisticas({
+        const novasEstatisticas = {
           totalEntradas,
           totalSaidas,
           totalVendas,
           totalMovimentacoes: data.length
-        })
+        }
+        
+        setEstatisticas(novasEstatisticas)
       }
       
     } catch (err) {
       console.error('Erro ao carregar estatísticas:', err)
     }
+  }
+
+  // Funções para cache de dados completos de caixas
+  const criarCaixaTemporario = (caixaFiltro: CaixaFiltro): Caixa => ({
+    ...caixaFiltro,
+    id_empresa: '',
+    saldo_inicial: caixaFiltro.saldo_final_calculado || 0,
+    criado_em: caixaFiltro.data_abertura,
+    atualizado_em: caixaFiltro.data_abertura,
+    id_profissional_abertura: undefined,
+    id_profissional_fechamento: undefined,
+  } as Caixa)
+
+  const buscarCaixaCompletoComCache = async (caixaFiltro: CaixaFiltro): Promise<Caixa> => {
+    // 1. Verificar se já está no cache
+    if (caixasCompletosCache.has(caixaFiltro.id)) {
+      return caixasCompletosCache.get(caixaFiltro.id)!
+    }
+    
+    // 2. Buscar dados completos do service
+    const { data, error } = await caixaService.getCaixaCompleto(caixaFiltro.id)
+    
+    if (error) {
+      console.error('Erro ao buscar caixa completo:', error)
+      // Fallback para objeto temporário
+      return criarCaixaTemporario(caixaFiltro)
+    }
+    
+    if (data) {
+      // 3. Adicionar ao cache
+      setCaixasCompletosCache(prev => new Map(prev).set(caixaFiltro.id, data))
+      return data
+    }
+    
+    // 4. Fallback se não encontrou
+    return criarCaixaTemporario(caixaFiltro)
+  }
+
+  const abrirEditarCaixa = async () => {
+    if (!caixaSelecionado) return
+    
+    const caixaCompleto = await buscarCaixaCompletoComCache(caixaSelecionado)
+    setCaixaCompletoParaEdicao(caixaCompleto)
+    setEditarCaixaOpen(true)
+  }
+
+  // Funções para cálculo dinâmico de saldo
+  const obterSaldoInicial = useCallback((caixa: Caixa | CaixaFiltro | null): number => {
+    if (!caixa) return 0
+    
+    // PRIORIDADE 1: Se temos caixaAtivo com o mesmo ID, SEMPRE usar seu saldo_inicial
+    if (caixaAtivo && caixa.id === caixaAtivo.id) {
+      return caixaAtivo.saldo_inicial
+    }
+    
+    // PRIORIDADE 2: Se é um objeto Caixa completo, usar saldo_inicial
+    if ('saldo_inicial' in caixa && typeof caixa.saldo_inicial === 'number') {
+      return caixa.saldo_inicial
+    }
+    
+    // PRIORIDADE 3: Se temos no cache, usar dados completos
+    if (caixasCompletosCache.has(caixa.id)) {
+      const caixaCompleto = caixasCompletosCache.get(caixa.id)!
+      return caixaCompleto.saldo_inicial
+    }
+    
+    // ÚLTIMO RECURSO: Nunca usar saldo_final_calculado como saldo inicial
+    return 0
+  }, [caixaAtivo, caixasCompletosCache])
+
+  const calcularSaldoCaixa = useCallback((
+    caixa: Caixa | CaixaFiltro | null,
+    estatisticas: { totalEntradas: number; totalSaidas: number; totalVendas: number; totalMovimentacoes: number }
+  ): number => {
+    if (!caixa) return 0
+    if (!estatisticas) return 0
+    
+    // Sempre usar obterSaldoInicial() para consistência
+    const saldoInicial = obterSaldoInicial(caixa)
+    
+    const totalEntradas = typeof estatisticas.totalEntradas === 'number' ? estatisticas.totalEntradas : 0
+    const totalSaidas = typeof estatisticas.totalSaidas === 'number' ? estatisticas.totalSaidas : 0
+    
+    const resultado = saldoInicial + totalEntradas - totalSaidas
+    return typeof resultado === 'number' && !isNaN(resultado) ? resultado : 0
+  }, [obterSaldoInicial])
+
+  // Função auxiliar para formatar valores monetários com segurança
+  const formatarValorMonetario = (valor: number | null | undefined): string => {
+    const valorSeguro = typeof valor === 'number' && !isNaN(valor) ? valor : 0
+    return valorSeguro.toFixed(2).replace('.', ',')
   }
 
   // Função para mostrar notificação
@@ -300,7 +398,7 @@ export default function CaixaPage() {
 
   // Função para editar caixa fechado
   const handleEditarCaixa = async (dados: { saldo_final_informado: number; observacoes?: string }) => {
-    if (!caixaSelecionado) return
+    if (!caixaSelecionado || !caixaCompletoParaEdicao) return
     
     setLoading(true)
     try {
@@ -312,6 +410,14 @@ export default function CaixaPage() {
       }
       
       setEditarCaixaOpen(false)
+      setCaixaCompletoParaEdicao(null)
+      
+      // Limpar cache do caixa editado
+      setCaixasCompletosCache(prev => {
+        const newCache = new Map(prev)
+        newCache.delete(caixaSelecionado.id)
+        return newCache
+      })
       
       // Recarregar dados dos caixas e dados do caixa selecionado
       await recarregarCaixas()
@@ -387,10 +493,9 @@ export default function CaixaPage() {
   
   const podeOperar = caixaVisualizado?.status === 'ABERTO'
 
-  // Calcular saldo atual baseado no caixa ativo por enquanto
-  // TODO: Melhorar para buscar dados completos do caixa selecionado
-  const saldoInicial = caixaAtivo?.saldo_inicial || 0
-  const saldoCalculado = saldoInicial + estatisticas.totalEntradas - estatisticas.totalSaidas
+  // Calcular saldo dinâmico baseado no caixa visualizado
+  const caixaParaCalculo = caixaAtivo || caixaSelecionado
+  const saldoCalculado = calcularSaldoCaixa(caixaParaCalculo, estatisticas) || 0
 
   const getDescricaoMovimentacao = (mov: MovimentacaoCaixa) => {
     // Se for uma movimentação de comanda (venda), exibir o nome do cliente
@@ -403,6 +508,33 @@ export default function CaixaPage() {
     }
     return mov.descricao
   }
+
+  // Otimizações de performance
+  const limparCacheCompleto = useCallback(() => {
+    setCaixasCompletosCache(new Map())
+  }, [])
+
+  // Pré-carregar dados completos do caixa ativo
+  const preCarregarCaixaAtivo = useCallback(async () => {
+    if (caixaAtivo && !caixasCompletosCache.has(caixaAtivo.id)) {
+      const { data } = await caixaService.getCaixaCompleto(caixaAtivo.id)
+      if (data) {
+        setCaixasCompletosCache(prev => new Map(prev).set(caixaAtivo.id, data))
+      }
+    }
+  }, [caixaAtivo, caixasCompletosCache])
+
+  // Limpar cache ao trocar de empresa ou fazer logout
+  useEffect(() => {
+    return () => {
+      limparCacheCompleto()
+    }
+  }, [limparCacheCompleto])
+
+  // Pré-carregar caixa ativo quando disponível
+  useEffect(() => {
+    preCarregarCaixaAtivo()
+  }, [preCarregarCaixaAtivo])
 
   if (initialLoading) {
     return (
@@ -518,11 +650,13 @@ export default function CaixaPage() {
           <Paper sx={{ p: 3, mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6" fontWeight="bold">
-                Status do Caixa
+                Status do Caixa - {caixaParaCalculo ? (
+                  caixaParaCalculo === caixaAtivo ? 'Ativo' : 'Selecionado'
+                ) : 'Nenhum'}
               </Typography>
               <Chip
-                label={caixaSelecionado ? caixaSelecionado.status : (caixaAtivo?.status === 'ABERTO' ? 'Aberto' : 'Fechado')}
-                color={caixaSelecionado ? (caixaSelecionado.status === 'ABERTO' ? 'success' : 'default') : (caixaAtivo?.status === 'ABERTO' ? 'success' : 'default')}
+                label={caixaParaCalculo?.status === 'ABERTO' ? 'Aberto' : 'Fechado'}
+                color={caixaParaCalculo?.status === 'ABERTO' ? 'success' : 'default'}
               />
             </Box>
             <Grid container spacing={2}>
@@ -531,10 +665,10 @@ export default function CaixaPage() {
                   Data de Abertura
                 </Typography>
                 <Typography variant="body1" fontWeight="medium" suppressHydrationWarning>
-                  {formatDate(caixaSelecionado ? caixaSelecionado.data_abertura : caixaAtivo!.data_abertura, isClientSide)}
+                  {formatDate(caixaParaCalculo!.data_abertura, isClientSide)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" suppressHydrationWarning>
-                  {formatTime(caixaSelecionado ? caixaSelecionado.data_abertura : caixaAtivo!.data_abertura, isClientSide)}
+                  {formatTime(caixaParaCalculo!.data_abertura, isClientSide)}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -542,15 +676,15 @@ export default function CaixaPage() {
                   Saldo Inicial
                 </Typography>
                 <Typography variant="h6" color="primary">
-                  R$ {saldoInicial.toFixed(2).replace('.', ',')}
+                  R$ {formatarValorMonetario(obterSaldoInicial(caixaParaCalculo))}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">
-                  Saldo Atual
+                  Saldo Atual {caixaParaCalculo !== caixaAtivo ? '(Calculado)' : ''}
                 </Typography>
                 <Typography variant="h6" color="success.main">
-                  R$ {saldoCalculado.toFixed(2).replace('.', ',')}
+                  R$ {formatarValorMonetario(saldoCalculado)}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -574,7 +708,7 @@ export default function CaixaPage() {
                   <EntradaIcon sx={{ fontSize: 40, color: 'success.main' }} />
                   <Box>
                     <Typography variant="h5" fontWeight="bold" color="success.main">
-                      R$ {estatisticas.totalEntradas.toFixed(2).replace('.', ',')}
+                      R$ {formatarValorMonetario(estatisticas.totalEntradas)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Total de Entradas
@@ -592,7 +726,7 @@ export default function CaixaPage() {
                   <SaidaIcon sx={{ fontSize: 40, color: 'error.main' }} />
                   <Box>
                     <Typography variant="h5" fontWeight="bold" color="error.main">
-                      R$ {estatisticas.totalSaidas.toFixed(2).replace('.', ',')}
+                      R$ {formatarValorMonetario(estatisticas.totalSaidas)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Total de Saídas
@@ -610,7 +744,7 @@ export default function CaixaPage() {
                   <MoneyIcon sx={{ fontSize: 40, color: 'primary.main' }} />
                   <Box>
                     <Typography variant="h5" fontWeight="bold" color="primary.main">
-                      R$ {estatisticas.totalVendas.toFixed(2).replace('.', ',')}
+                      R$ {formatarValorMonetario(estatisticas.totalVendas)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Total de Vendas
@@ -735,31 +869,31 @@ export default function CaixaPage() {
           loading={loading}
         />
 
-        {caixaAtivo && (
-          <FecharCaixaDialog
-            open={fecharCaixaOpen}
-            onClose={() => setFecharCaixaOpen(false)}
-            onConfirm={handleFecharCaixa}
-            caixa={caixaAtivo}
-            saldoCalculado={saldoCalculado}
-            totalEntradas={estatisticas.totalEntradas}
-            totalSaidas={estatisticas.totalSaidas}
-            loading={loading}
-          />
-        )}
+        {caixaAtivo && (() => {
+          return (
+            <FecharCaixaDialog
+              open={fecharCaixaOpen}
+              onClose={() => setFecharCaixaOpen(false)}
+              onConfirm={handleFecharCaixa}
+              caixa={caixaAtivo}
+              saldoCalculado={saldoCalculado}
+              saldoInicial={obterSaldoInicial(caixaParaCalculo)}
+              totalEntradas={estatisticas.totalEntradas}
+              totalSaidas={estatisticas.totalSaidas}
+              loading={loading}
+            />
+          )
+        })()}
 
-        {caixaSelecionado && podeEditarCaixa && (
+        {caixaCompletoParaEdicao && podeEditarCaixa && (
           <EditarCaixaDialog
             open={editarCaixaOpen}
-            onClose={() => setEditarCaixaOpen(false)}
+            onClose={() => {
+              setEditarCaixaOpen(false)
+              setCaixaCompletoParaEdicao(null)
+            }}
             onConfirm={handleEditarCaixa}
-            caixa={{
-              ...caixaSelecionado,
-              id_empresa: '', // TODO: buscar dados completos
-              saldo_inicial: 0, // TODO: buscar dados completos
-              criado_em: caixaSelecionado.data_abertura,
-              atualizado_em: caixaSelecionado.data_abertura,
-            } as Caixa}
+            caixa={caixaCompletoParaEdicao}
             saldoCalculado={saldoCalculado}
             loading={loading}
           />

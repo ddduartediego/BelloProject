@@ -87,6 +87,26 @@ class CaixaService extends BaseService {
     return this.handleRequest(query)
   }
 
+  async getCaixaCompleto(caixaId: string): Promise<ServiceResponse<Caixa>> {
+    const query = this.supabase
+      .from('caixa')
+      .select(`
+        *,
+        profissional_abertura:id_profissional_abertura(
+          id,
+          usuario_responsavel:id_usuario(nome_completo)
+        ),
+        profissional_fechamento:id_profissional_fechamento(
+          id,
+          usuario_responsavel:id_usuario(nome_completo)
+        )
+      `)
+      .eq('id', caixaId)
+      .single()
+      
+    return this.handleRequest(query)
+  }
+
   async abrir(data: CreateCaixaData): Promise<ServiceResponse<Caixa>> {
     try {
       const empresaId = await empresaService.getEmpresaAtualId()
