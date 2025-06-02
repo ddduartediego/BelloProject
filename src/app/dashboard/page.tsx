@@ -311,7 +311,7 @@ export default function DashboardPage() {
 
           {/* Alertas importantes */}
           <Grid item xs={12} md={6}>
-            <AlertasImportantes metrics={metrics} />
+            <AlertasImportantes />
           </Grid>
 
           {/* Próximas funcionalidades */}
