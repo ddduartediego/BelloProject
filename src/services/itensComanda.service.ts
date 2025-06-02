@@ -271,14 +271,15 @@ class ItensComandaService extends BaseService {
       // Buscar todos os itens da comanda
       const { data: itens } = await this.supabase
         .from('item_comanda')
-        .select('id_servico, id_produto, preco_total_item')
+        .select('id_servico, id_produto, nome_servico_avulso, preco_total_item')
         .eq('id_comanda', comandaId)
 
       if (!itens) return
 
       // Calcular totais
+      // Serviços = serviços cadastrados (id_servico) + serviços avulsos (nome_servico_avulso)
       const valorTotalServicos = itens
-        .filter(item => item.id_servico)
+        .filter(item => item.id_servico || item.nome_servico_avulso)
         .reduce((total, item) => total + item.preco_total_item, 0)
 
       const valorTotalProdutos = itens

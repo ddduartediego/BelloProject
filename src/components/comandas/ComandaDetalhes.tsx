@@ -405,6 +405,25 @@ export default function ComandaDetalhes({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Debug da comanda recebida
+  console.log('🎯 ComandaDetalhes - Comanda recebida:', {
+    id: comanda.id,
+    nome: comanda.nome_cliente_avulso || comanda.cliente?.nome,
+    total: comanda.valor_total_servicos + comanda.valor_total_produtos,
+    itensExists: !!comanda.itens,
+    itensLength: comanda.itens?.length,
+    itensData: comanda.itens,
+    primeiroItem: comanda.itens?.[0] ? {
+      id: comanda.itens[0].id,
+      nome_servico_avulso: comanda.itens[0].nome_servico_avulso,
+      servico: comanda.itens[0].servico,
+      produto: comanda.itens[0].produto,
+      quantidade: comanda.itens[0].quantidade,
+      preco_unitario: comanda.itens[0].preco_unitario_registrado,
+      preco_total: comanda.itens[0].preco_total_item
+    } : null
+  })
+
   const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', {
       style: 'currency',

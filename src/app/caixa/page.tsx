@@ -30,10 +30,12 @@ import {
   Add as AddIcon,
   Remove as RemoveIcon,
   Assessment as RelatorioIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material'
 import Layout from '@/components/common/Layout'
 import AbrirCaixaDialog from '@/components/caixa/AbrirCaixaDialog'
 import FecharCaixaDialog from '@/components/caixa/FecharCaixaDialog'
+import EditarCaixaDialog from '@/components/caixa/EditarCaixaDialog'
 import MovimentacaoDialog from '@/components/caixa/MovimentacaoDialog'
 import { 
   caixaService, 
@@ -42,6 +44,8 @@ import {
 import type { Caixa, MovimentacaoCaixa } from '@/types/database'
 import { useClientSide } from '@/hooks/useClientSide'
 import { formatDate, formatDateTime, formatTime } from '@/utils/dateFormat'
+import { useCaixas } from '@/hooks/useCaixas'
+import FiltroCaixa from '@/components/ui/FiltroCaixa'
 
 export default function CaixaPage() {
   const theme = useTheme()
@@ -59,6 +63,7 @@ export default function CaixaPage() {
   
   const [abrirCaixaOpen, setAbrirCaixaOpen] = useState(false)
   const [fecharCaixaOpen, setFecharCaixaOpen] = useState(false)
+  const [editarCaixaOpen, setEditarCaixaOpen] = useState(false)
   const [movimentacaoOpen, setMovimentacaoOpen] = useState(false)
   const [tipoMovimentacao, setTipoMovimentacao] = useState<'ENTRADA' | 'SAIDA'>('ENTRADA')
   const [loading, setLoading] = useState(false)
@@ -73,10 +78,34 @@ export default function CaixaPage() {
     severity: 'success'
   })
 
+  // Hook para gerenciar caixas
+  const {
+    caixas,
+    caixaSelecionado,
+    setCaixaSelecionado,
+    loading: caixasLoading,
+    error: caixasError,
+    recarregar: recarregarCaixas
+  } = useCaixas()
+
+  // Determinar estado da interface baseado nas novas regras de negócio
+  const temCaixaAberto = caixas.some(c => c.status === 'ABERTO')
+  const podeAbrirCaixa = !temCaixaAberto
+  const podeFecharCaixa = caixaSelecionado?.status === 'ABERTO'
+  const podeEditarCaixa = caixaSelecionado?.status === 'FECHADO'
+  const podeMovimentar = caixaSelecionado?.status === 'ABERTO'
+
   // Carregamento inicial
   useEffect(() => {
     carregarDadosCaixa()
   }, [])
+
+  // Recarregar quando caixa selecionado mudar
+  useEffect(() => {
+    if (caixaSelecionado) {
+      carregarDadosCaixaSelecionado(caixaSelecionado.id)
+    }
+  }, [caixaSelecionado])
 
   // Carregar dados do caixa ativo e movimentações
   const carregarDadosCaixa = async () => {
@@ -116,6 +145,25 @@ export default function CaixaPage() {
       showSnackbar('Erro inesperado ao carregar dados', 'error')
     } finally {
       setInitialLoading(false)
+    }
+  }
+
+  // Carregar dados de um caixa específico selecionado
+  const carregarDadosCaixaSelecionado = async (caixaId: string) => {
+    try {
+      setLoading(true)
+      
+      // Carregar movimentações do caixa selecionado
+      await carregarMovimentacoes(caixaId)
+      
+      // Carregar estatísticas do caixa selecionado
+      await carregarEstatisticas(caixaId)
+      
+    } catch (err) {
+      console.error('Erro no carregamento do caixa selecionado:', err)
+      showSnackbar('Erro ao carregar dados do caixa selecionado', 'error')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -203,8 +251,8 @@ export default function CaixaPage() {
       setCaixaAtivo(data)
       setAbrirCaixaOpen(false)
       
-      // Recarregar dados
-      await carregarDadosCaixa()
+      // Recarregar todos os dados
+      await recarregarCaixas()
       
       showSnackbar(`Caixa aberto com saldo inicial de R$ ${saldoInicial.toFixed(2).replace('.', ',')}`)
       
@@ -218,7 +266,7 @@ export default function CaixaPage() {
 
   // Função para fechar caixa
   const handleFecharCaixa = async (observacoes?: string) => {
-    if (!caixaAtivo) return
+    if (!caixaSelecionado || caixaSelecionado.status !== 'ABERTO') return
     
     setLoading(true)
     try {
@@ -227,7 +275,7 @@ export default function CaixaPage() {
         observacoes: observacoes
       }
       
-      const { data, error } = await caixaService.fechar(caixaAtivo.id, dadosFechamento)
+      const { data, error } = await caixaService.fechar(caixaSelecionado.id, dadosFechamento)
       
       if (error) {
         showSnackbar('Erro ao fechar caixa: ' + error, 'error')
@@ -237,8 +285,8 @@ export default function CaixaPage() {
       setCaixaAtivo(null)
       setFecharCaixaOpen(false)
       
-      // Recarregar dados
-      await carregarDadosCaixa()
+      // Recarregar todos os dados
+      await recarregarCaixas()
       
       showSnackbar('Caixa fechado com sucesso!')
       
@@ -250,9 +298,41 @@ export default function CaixaPage() {
     }
   }
 
+  // Função para editar caixa fechado
+  const handleEditarCaixa = async (dados: { saldo_final_informado: number; observacoes?: string }) => {
+    if (!caixaSelecionado) return
+    
+    setLoading(true)
+    try {
+      const { data, error } = await caixaService.editar(caixaSelecionado.id, dados)
+      
+      if (error) {
+        showSnackbar('Erro ao editar caixa: ' + error, 'error')
+        return
+      }
+      
+      setEditarCaixaOpen(false)
+      
+      // Recarregar dados dos caixas e dados do caixa selecionado
+      await recarregarCaixas()
+      await carregarDadosCaixaSelecionado(caixaSelecionado.id)
+      
+      showSnackbar('Caixa editado com sucesso!')
+      
+    } catch (err) {
+      console.error('Erro ao editar caixa:', err)
+      showSnackbar('Erro inesperado ao editar caixa', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Função para adicionar movimentação
   const handleAdicionarMovimentacao = async (tipo: 'ENTRADA' | 'SAIDA', valor: number, descricao: string, categoria?: string) => {
-    if (!caixaAtivo) return
+    // Usar caixa selecionado se for aberto, senão usar caixa ativo
+    const caixaParaMovimentacao = (caixaSelecionado?.status === 'ABERTO') ? caixaSelecionado.id : caixaAtivo?.id
+    
+    if (!caixaParaMovimentacao) return
     
     setLoading(true)
     try {
@@ -260,14 +340,14 @@ export default function CaixaPage() {
       
       if (tipo === 'ENTRADA') {
         result = await movimentacoesCaixaService.criarReforco(
-          caixaAtivo.id, 
+          caixaParaMovimentacao, 
           valor, 
           descricao, 
           undefined // Sem profissional responsável por enquanto
         )
       } else {
         result = await movimentacoesCaixaService.criarSangria(
-          caixaAtivo.id, 
+          caixaParaMovimentacao, 
           valor, 
           descricao, 
           undefined // Sem profissional responsável por enquanto
@@ -284,8 +364,8 @@ export default function CaixaPage() {
       setMovimentacaoOpen(false)
       
       // Recarregar dados
-      await carregarMovimentacoes(caixaAtivo.id)
-      await carregarEstatisticas(caixaAtivo.id)
+      await carregarMovimentacoes(caixaParaMovimentacao)
+      await carregarEstatisticas(caixaParaMovimentacao)
       
       showSnackbar(`${tipo === 'ENTRADA' ? 'Entrada' : 'Saída'} de R$ ${valor.toFixed(2).replace('.', ',')} registrada!`)
       
@@ -302,9 +382,15 @@ export default function CaixaPage() {
     setMovimentacaoOpen(true)
   }
 
-  // Cálculos
-  const saldoCalculado = caixaAtivo ? 
-    caixaAtivo.saldo_inicial + estatisticas.totalEntradas - estatisticas.totalSaidas : 0
+  // Determinar qual caixa está sendo visualizado e seu status
+  const caixaVisualizado = caixaSelecionado || caixaAtivo
+  
+  const podeOperar = caixaVisualizado?.status === 'ABERTO'
+
+  // Calcular saldo atual baseado no caixa ativo por enquanto
+  // TODO: Melhorar para buscar dados completos do caixa selecionado
+  const saldoInicial = caixaAtivo?.saldo_inicial || 0
+  const saldoCalculado = saldoInicial + estatisticas.totalEntradas - estatisticas.totalSaidas
 
   const getDescricaoMovimentacao = (mov: MovimentacaoCaixa) => {
     // Se for uma movimentação de comanda (venda), exibir o nome do cliente
@@ -362,7 +448,7 @@ export default function CaixaPage() {
 
           {/* Ações do caixa */}
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            {!caixaAtivo ? (
+            {podeAbrirCaixa && (
               <Button
                 variant="contained"
                 startIcon={<AbrirIcon />}
@@ -373,7 +459,9 @@ export default function CaixaPage() {
               >
                 Abrir Caixa
               </Button>
-            ) : (
+            )}
+            
+            {podeFecharCaixa && (
               <Button
                 variant="contained"
                 startIcon={<FecharIcon />}
@@ -385,19 +473,56 @@ export default function CaixaPage() {
                 Fechar Caixa
               </Button>
             )}
+            
+            {podeEditarCaixa && (
+              <Button
+                variant="contained"
+                startIcon={<EditIcon />}
+                onClick={() => setEditarCaixaOpen(true)}
+                color="warning"
+                size="large"
+                disabled={loading}
+              >
+                Editar Caixa
+              </Button>
+            )}
           </Box>
         </Box>
 
+        {/* Filtro de Caixa */}
+        <Box sx={{ mb: 3 }}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <FiltroCaixa
+                caixas={caixas}
+                caixaSelecionado={caixaSelecionado}
+                onCaixaChange={setCaixaSelecionado}
+                loading={caixasLoading}
+                error={caixasError}
+                size="small"
+                label="Selecionar Caixa"
+              />
+            </Grid>
+            <Grid item xs={12} md={8}>
+              <Typography variant="body2" color="text.secondary">
+                {caixaSelecionado 
+                  ? `Visualizando: ${caixaSelecionado.label}` 
+                  : 'Selecione um caixa para visualizar suas movimentações'}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Box>
+
         {/* Status do Caixa */}
-        {caixaAtivo && (
+        {(caixaSelecionado || caixaAtivo) && (
           <Paper sx={{ p: 3, mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6" fontWeight="bold">
                 Status do Caixa
               </Typography>
               <Chip
-                label={caixaAtivo.status === 'ABERTO' ? 'Aberto' : 'Fechado'}
-                color={caixaAtivo.status === 'ABERTO' ? 'success' : 'default'}
+                label={caixaSelecionado ? caixaSelecionado.status : (caixaAtivo?.status === 'ABERTO' ? 'Aberto' : 'Fechado')}
+                color={caixaSelecionado ? (caixaSelecionado.status === 'ABERTO' ? 'success' : 'default') : (caixaAtivo?.status === 'ABERTO' ? 'success' : 'default')}
               />
             </Box>
             <Grid container spacing={2}>
@@ -406,10 +531,10 @@ export default function CaixaPage() {
                   Data de Abertura
                 </Typography>
                 <Typography variant="body1" fontWeight="medium" suppressHydrationWarning>
-                  {formatDate(caixaAtivo.data_abertura, isClientSide)}
+                  {formatDate(caixaSelecionado ? caixaSelecionado.data_abertura : caixaAtivo!.data_abertura, isClientSide)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" suppressHydrationWarning>
-                  {formatTime(caixaAtivo.data_abertura, isClientSide)}
+                  {formatTime(caixaSelecionado ? caixaSelecionado.data_abertura : caixaAtivo!.data_abertura, isClientSide)}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -417,7 +542,7 @@ export default function CaixaPage() {
                   Saldo Inicial
                 </Typography>
                 <Typography variant="h6" color="primary">
-                  R$ {caixaAtivo.saldo_inicial.toFixed(2).replace('.', ',')}
+                  R$ {saldoInicial.toFixed(2).replace('.', ',')}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
@@ -516,7 +641,7 @@ export default function CaixaPage() {
         </Grid>
 
         {/* Ações de Movimentação */}
-        {caixaAtivo && (
+        {podeMovimentar && (
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
               Movimentações
@@ -619,6 +744,23 @@ export default function CaixaPage() {
             saldoCalculado={saldoCalculado}
             totalEntradas={estatisticas.totalEntradas}
             totalSaidas={estatisticas.totalSaidas}
+            loading={loading}
+          />
+        )}
+
+        {caixaSelecionado && podeEditarCaixa && (
+          <EditarCaixaDialog
+            open={editarCaixaOpen}
+            onClose={() => setEditarCaixaOpen(false)}
+            onConfirm={handleEditarCaixa}
+            caixa={{
+              ...caixaSelecionado,
+              id_empresa: '', // TODO: buscar dados completos
+              saldo_inicial: 0, // TODO: buscar dados completos
+              criado_em: caixaSelecionado.data_abertura,
+              atualizado_em: caixaSelecionado.data_abertura,
+            } as Caixa}
+            saldoCalculado={saldoCalculado}
             loading={loading}
           />
         )}

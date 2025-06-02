@@ -24,6 +24,7 @@ export interface ComandaFilters {
   status?: StatusComanda
   id_profissional?: string
   id_cliente?: string
+  id_caixa?: string
   data_inicio?: string
   data_fim?: string
   busca?: string
@@ -73,6 +74,18 @@ class ComandasService extends BaseService {
             id_usuario,
             especialidades,
             usuario_responsavel:id_usuario(nome_completo, email)
+          ),
+          itens:item_comanda(
+            id,
+            id_servico,
+            id_produto,
+            nome_servico_avulso,
+            descricao_servico_avulso,
+            quantidade,
+            preco_unitario_registrado,
+            preco_total_item,
+            servico:id_servico(id, nome, preco),
+            produto:id_produto(id, nome, preco_venda)
           )
         `, { count: 'exact' })
         .eq('id_empresa', empresaId)
@@ -86,6 +99,9 @@ class ComandasService extends BaseService {
       }
       if (filters.id_cliente) {
         query = query.eq('id_cliente', filters.id_cliente)
+      }
+      if (filters.id_caixa) {
+        query = query.eq('id_caixa', filters.id_caixa)
       }
       if (filters.data_inicio) {
         query = query.gte('data_abertura', filters.data_inicio)
@@ -119,6 +135,8 @@ class ComandasService extends BaseService {
   }
 
   async getById(id: string): Promise<ServiceResponse<ComandaComDetalhes>> {
+    console.log('🔍 ComandasService.getById - Buscando comanda:', id)
+    
     const query = this.supabase
       .from('comanda')
       .select(`
@@ -153,6 +171,18 @@ class ComandasService extends BaseService {
       .single()
 
     const result = await this.handleRequest(query) as ServiceResponse<ComandaComDetalhes>
+    
+    console.log('📦 ComandasService.getById - Resultado:', {
+      error: result.error,
+      hasData: !!result.data,
+      itensCount: result.data?.itens?.length || 0,
+      itens: result.data?.itens?.map(item => ({
+        id: item.id,
+        nome: item.nome_servico_avulso || item.servico?.nome || item.produto?.nome,
+        quantidade: item.quantidade,
+        preco: item.preco_unitario_registrado
+      }))
+    })
     
     return result
   }

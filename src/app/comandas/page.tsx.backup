@@ -70,7 +70,7 @@ export default function ComandasPage() {
   const [comandaDetalhesOpen, setComandaDetalhesOpen] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [selectedComanda, setSelectedComanda] = useState<ComandaComDetalhes | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true)
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [busca, setBusca] = useState('')
@@ -84,49 +84,30 @@ export default function ComandasPage() {
     severity: 'success'
   })
 
-  // Hook para gerenciar caixas
-  const {
-    caixas,
-    caixaSelecionado,
-    setCaixaSelecionado,
-    loading: caixasLoading,
-    error: caixasError
-  } = useCaixas()
-
-  // Função para mostrar notificação
-  const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
-    setSnackbar({ open: true, message, severity })
-  }
-
   // Carregar comandas na inicialização
   useEffect(() => {
     carregarComandas()
   }, [])
 
   // Função para carregar comandas
-  const carregarComandas = async () => {
+  const carregarComandas = useCallback(async () => {
     try {
-      setInitialLoading(true)
+      setLoading(true)
 
       // Preparar filtros
-      const filtros: ComandaFilters = {}
+      const filtrosComandas: any = {}
       
       if (filtroStatus !== 'todos') {
-        filtros.status = filtroStatus.toUpperCase() as StatusComanda
+        filtrosComandas.status = filtroStatus.toUpperCase() as StatusComanda
       }
       
       if (busca.trim()) {
-        filtros.busca = busca.trim()
-      }
-
-      // Filtro por caixa
-      if (caixaSelecionado) {
-        filtros.id_caixa = caixaSelecionado.id
-      }
-
       const response = await comandasService.getAll(
         { page: 1, limit: 100 },
-        filtros
+        { 
+          status: filtroStatus !== 'todos' ? filtroStatus.toUpperCase() as StatusComanda : undefined, 
+          busca: busca || undefined 
+        }
       )
 
       if (response.error) {
@@ -157,7 +138,12 @@ export default function ComandasPage() {
     if (!initialLoading) {
       carregarComandas()
     }
-  }, [filtroStatus, busca, caixaSelecionado])
+  }, [filtroStatus, busca])
+
+  // Função para mostrar notificação
+  const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    setSnackbar({ open: true, message, severity })
+  }
 
   // Função para fechar snackbar
   const handleCloseSnackbar = () => {
@@ -503,69 +489,61 @@ export default function ComandasPage() {
         </Box>
 
         {/* Filtros */}
-        <Box sx={{ mb: 3 }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={filtroStatus}
-                  label="Status"
-                  onChange={(e) => setFiltroStatus(e.target.value)}
-                >
-                  <MenuItem value="todos">Todos</MenuItem>
-                  <MenuItem value="aberta">Abertas</MenuItem>
-                  <MenuItem value="fechada">Fechadas</MenuItem>
-                  <MenuItem value="cancelada">Canceladas</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Filtro por Status */}
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={filtroStatus}
+              label="Status"
+              onChange={(e) => setFiltroStatus(e.target.value)}
+            >
+              <MenuItem value="todos">Todos</MenuItem>
+              <MenuItem value="aberta">Abertas</MenuItem>
+              <MenuItem value="fechada">Fechadas</MenuItem>
+              <MenuItem value="cancelada">Canceladas</MenuItem>
+            </Select>
+          </FormControl>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <FiltroCaixa
-                caixas={caixas}
-                caixaSelecionado={caixaSelecionado}
-                onCaixaChange={(caixa) => {
-                  setCaixaSelecionado(caixa)
-                  // Resetar outros filtros conforme especificado
-                  setFiltroStatus('todos')
-                  setBusca('')
-                }}
-                loading={caixasLoading}
-                error={caixasError}
-                size="small"
-              />
-            </Grid>
+          {/* Filtro por Caixa */}
+          <FiltroCaixa
+            caixas={caixas}
+            caixaSelecionado={caixaSelecionado}
+            onCaixaChange={(caixa) => {
+              setCaixaSelecionado(caixa)
+              // Resetar outros filtros conforme especificado
+              setFiltroStatus('todos')
+              setBusca('')
+            }}
+            loading={caixasLoading}
+            error={caixasError}
+            size="small"
+          />
 
-            <Grid item xs={12} sm={6} md={4}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Buscar por cliente ou ID da comanda"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                InputProps={{
-                  startAdornment: <SearchIcon color="action" sx={{ mr: 1 }} />
-                }}
-              />
-            </Grid>
+          {/* Campo de busca */}
+          <TextField
+            size="small"
+            placeholder="Buscar por cliente ou ID..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            InputProps={{
+              startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+            }}
+            sx={{ minWidth: 250 }}
+          />
 
-            <Grid item xs={12} sm={6} md={2}>
-              <Button
-                fullWidth
-                variant="outlined"
-                startIcon={<FilterIcon />}
-                onClick={() => {
-                  setFiltroStatus('todos')
-                  setBusca('')
-                  setCaixaSelecionado(caixaSelecionado)
-                }}
-                size="small"
-              >
-                Limpar
-              </Button>
-            </Grid>
-          </Grid>
+          <Button
+            variant="outlined"
+            startIcon={<FilterIcon />}
+            onClick={() => {
+              setFiltroStatus('todos')
+              setBusca('')
+              setCaixaSelecionado(caixaAtivo)
+            }}
+            size="small"
+          >
+            Limpar Filtros
+          </Button>
         </Box>
 
         {/* Lista de Comandas */}

@@ -204,4 +204,14 @@ export interface ComandaComDetalhes extends Comanda {
     produto?: Produto 
     profissional_executante?: Profissional
   })[]
+}
+
+export interface MovimentacaoCaixaComDetalhes extends MovimentacaoCaixa {
+  comanda?: {
+    id: string
+    cliente?: Cliente
+    nome_cliente_avulso?: string
+  }
+  caixa?: Caixa
+  profissional_responsavel?: Profissional & { usuario: Usuario }
 } 

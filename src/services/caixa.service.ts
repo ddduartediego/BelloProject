@@ -12,6 +12,11 @@ export interface FecharCaixaData {
   observacoes?: string
 }
 
+export interface EditarCaixaData {
+  saldo_final_informado: number
+  observacoes?: string
+}
+
 export interface CaixaComMovimentacoes extends Caixa {
   movimentacoes?: Array<{
     id: string
@@ -198,6 +203,108 @@ class CaixaService extends BaseService {
           .gte('data_abertura', periodo.inicio)
           .lte('data_abertura', periodo.fim)
       }
+
+      return this.handleRequest(query)
+    } catch (err) {
+      return {
+        data: null,
+        error: this.handleError(err as Error)
+      }
+    }
+  }
+
+  // Buscar caixas para usar no filtro (últimos 30 dias)
+  async getCaixasParaFiltro(): Promise<ServiceResponse<Array<{
+    id: string
+    data_abertura: string
+    status: StatusCaixa
+    saldo_final_calculado?: number
+    label: string
+  }>>> {
+    try {
+      const empresaId = await empresaService.getEmpresaAtualId()
+      if (!empresaId) {
+        return { data: null, error: 'Empresa não encontrada' }
+      }
+
+      // Últimos 30 dias
+      const dataLimite = new Date()
+      dataLimite.setDate(dataLimite.getDate() - 30)
+      const dataLimiteISO = dataLimite.toISOString()
+
+      const { data: caixas, error } = await this.supabase
+        .from('caixa')
+        .select('id, data_abertura, status, saldo_final_calculado')
+        .eq('id_empresa', empresaId)
+        .gte('data_abertura', dataLimiteISO)
+        .order('data_abertura', { ascending: false })
+
+      if (error) {
+        return { data: null, error: this.handleError(error) }
+      }
+
+      // Formatar caixas com labels
+      const caixasFormatados = (caixas || []).map(caixa => {
+        const data = new Date(caixa.data_abertura).toLocaleDateString('pt-BR')
+        
+        let label: string
+        if (caixa.status === 'ABERTO') {
+          label = `Caixa ${data} - Aberto`
+        } else {
+          const valor = caixa.saldo_final_calculado || 0
+          label = `Caixa ${data} - Fechado (R$ ${valor.toFixed(2).replace('.', ',')})`
+        }
+
+        return {
+          id: caixa.id,
+          data_abertura: caixa.data_abertura,
+          status: caixa.status as StatusCaixa,
+          saldo_final_calculado: caixa.saldo_final_calculado,
+          label
+        }
+      })
+
+      return { data: caixasFormatados, error: null }
+    } catch (err) {
+      return {
+        data: null,
+        error: this.handleError(err as Error)
+      }
+    }
+  }
+
+  async editar(id: string, dados: EditarCaixaData): Promise<ServiceResponse<Caixa>> {
+    try {
+      // Buscar caixa primeiro
+      const { data: caixa, error: caixaError } = await this.supabase
+        .from('caixa')
+        .select('*')
+        .eq('id', id)
+        .single()
+      
+      if (caixaError) {
+        return { data: null, error: this.handleError(caixaError) }
+      }
+
+      if (!caixa) {
+        return { data: null, error: 'Caixa não encontrado' }
+      }
+
+      if (caixa.status !== 'FECHADO') {
+        return { data: null, error: 'Apenas caixas fechados podem ser editados' }
+      }
+
+      // Atualizar apenas os campos permitidos
+      const query = this.supabase
+        .from('caixa')
+        .update({
+          saldo_final_informado: dados.saldo_final_informado,
+          observacoes: dados.observacoes,
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single()
 
       return this.handleRequest(query)
     } catch (err) {
