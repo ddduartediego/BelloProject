@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { 
   Card, 
   CardContent, 
@@ -8,6 +8,10 @@ import {
   Box,
   useTheme,
   CircularProgress,
+  ToggleButton,
+  ToggleButtonGroup,
+  Chip,
+  Stack,
 } from '@mui/material'
 import {
   LineChart,
@@ -17,20 +21,13 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend
+  Legend,
+  BarChart,
+  Bar
 } from 'recharts'
 import { DashboardMetrics } from '@/hooks/useDashboardMetrics'
-
-// Dados simulados para demonstração (usado quando não há métricas reais)
-const dadosVendasMock = [
-  { mes: 'Jan', vendas: 12400, meta: 15000 },
-  { mes: 'Fev', vendas: 18200, meta: 15000 },
-  { mes: 'Mar', vendas: 14800, meta: 15000 },
-  { mes: 'Abr', vendas: 22100, meta: 20000 },
-  { mes: 'Mai', vendas: 19800, meta: 20000 },
-  { mes: 'Jun', vendas: 24500, meta: 22000 },
-  { mes: 'Jul', vendas: 28300, meta: 25000 },
-]
+import { format, parseISO, startOfWeek, eachDayOfInterval, addDays } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 interface VendasChartProps {
   title?: string
@@ -42,6 +39,8 @@ export default function VendasChart({
   metrics 
 }: VendasChartProps) {
   const theme = useTheme()
+  const [visualizacao, setVisualizacao] = useState<'vendas' | 'comandas'>('vendas')
+  const [periodo, setPeriodo] = useState<'diario' | 'semanal'>('diario')
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -50,23 +49,50 @@ export default function VendasChart({
     }).format(value)
   }
 
-  // Gerar dados baseados nas métricas reais ou usar mock
-  const getDadosVendas = () => {
-    if (metrics?.vendas) {
-      // Quando tivermos dados reais de comandas, usaremos aqui
-      // Por enquanto, combina métricas reais com dados simulados
-      return dadosVendasMock.map((item, index) => ({
-        ...item,
-        // Ajustar último mês baseado nas vendas do dia atual
-        vendas: index === dadosVendasMock.length - 1 
-          ? metrics.vendas.totalMes 
-          : item.vendas
+  // Processar dados reais ou mostrar vazio
+  const getDadosGrafico = () => {
+    if (!metrics?.vendaDetalhada?.porDia || metrics.vendaDetalhada.porDia.length === 0) {
+      return []
+    }
+
+    const dadosPorDia = metrics.vendaDetalhada.porDia.map(item => ({
+      data: format(parseISO(item.data), 'dd/MM', { locale: ptBR }),
+      dataCompleta: item.data,
+      vendas: item.vendas,
+      comandas: item.comandas,
+      ticketMedio: item.comandas > 0 ? item.vendas / item.comandas : 0
+    }))
+
+    if (periodo === 'semanal') {
+      // Agrupar por semana
+      const dadosPorSemana: Record<string, { vendas: number; comandas: number; dias: number }> = {}
+      
+      dadosPorDia.forEach(item => {
+        const data = parseISO(item.dataCompleta)
+        const inicioSemana = startOfWeek(data, { weekStartsOn: 0 })
+        const chave = format(inicioSemana, 'yyyy-MM-dd')
+        
+        if (!dadosPorSemana[chave]) {
+          dadosPorSemana[chave] = { vendas: 0, comandas: 0, dias: 0 }
+        }
+        
+        dadosPorSemana[chave].vendas += item.vendas
+        dadosPorSemana[chave].comandas += item.comandas
+        dadosPorSemana[chave].dias++
+      })
+
+      return Object.entries(dadosPorSemana).map(([semana, dados]) => ({
+        data: `Sem ${format(parseISO(semana), 'dd/MM', { locale: ptBR })}`,
+        vendas: dados.vendas,
+        comandas: dados.comandas,
+        ticketMedio: dados.comandas > 0 ? dados.vendas / dados.comandas : 0
       }))
     }
-    return dadosVendasMock
+
+    return dadosPorDia
   }
 
-  const dadosVendas = getDadosVendas()
+  const dadosGrafico = getDadosGrafico()
 
   const CustomTooltip = ({ active, payload, label }: { 
     active?: boolean
@@ -98,7 +124,11 @@ export default function VendasChart({
               variant="body2"
               sx={{ color: entry.color }}
             >
-              {entry.name}: {formatCurrency(entry.value)}
+              {entry.name}: {
+                entry.name.includes('Vendas') || entry.name.includes('Ticket') 
+                  ? formatCurrency(entry.value)
+                  : entry.value
+              }
             </Typography>
           ))}
         </Box>
@@ -108,12 +138,13 @@ export default function VendasChart({
   }
 
   // Calcular estatísticas
-  const ultimoMes = dadosVendas[dadosVendas.length - 1]?.vendas || 0
-  const penultimoMes = dadosVendas[dadosVendas.length - 2]?.vendas || 0
-  const crescimento = penultimoMes > 0 
-    ? ((ultimoMes - penultimoMes) / penultimoMes * 100) 
-    : (metrics?.vendas?.percentualCrescimento || 15.2)
-  const mediaMensal = dadosVendas.reduce((acc, curr) => acc + curr.vendas, 0) / dadosVendas.length
+  const totalVendas = dadosGrafico.reduce((acc, item) => acc + item.vendas, 0)
+  const totalComandas = dadosGrafico.reduce((acc, item) => acc + item.comandas, 0)
+  const ticketMedioGeral = totalComandas > 0 ? totalVendas / totalComandas : 0
+  const melhorDia = dadosGrafico.reduce((max, item) => 
+    item.vendas > max.vendas ? item : max, 
+    { data: '', vendas: 0, comandas: 0, ticketMedio: 0 }
+  )
 
   return (
     <Card>
@@ -121,93 +152,157 @@ export default function VendasChart({
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" fontWeight="bold" gutterBottom>
             {title}
-            {!metrics && (
+            {(!metrics || !metrics.vendaDetalhada) && (
               <Typography component="span" variant="caption" color="warning.main" sx={{ ml: 1 }}>
-                (Dados simulados)
+                (Aguardando dados)
               </Typography>
             )}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Comparativo entre vendas realizadas e metas mensais
+            Análise de performance baseada em dados reais de comandas
           </Typography>
         </Box>
+
+        {/* Controles */}
+        <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+          <ToggleButtonGroup
+            value={visualizacao}
+            exclusive
+            onChange={(_, newValue) => newValue && setVisualizacao(newValue)}
+            size="small"
+          >
+            <ToggleButton value="vendas">Vendas</ToggleButton>
+            <ToggleButton value="comandas">Comandas</ToggleButton>
+          </ToggleButtonGroup>
+
+          <ToggleButtonGroup
+            value={periodo}
+            exclusive
+            onChange={(_, newValue) => newValue && setPeriodo(newValue)}
+            size="small"
+          >
+            <ToggleButton value="diario">Diário</ToggleButton>
+            <ToggleButton value="semanal">Semanal</ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
 
         {!metrics ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
             <CircularProgress />
           </Box>
+        ) : dadosGrafico.length === 0 ? (
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: 300,
+            color: 'text.secondary'
+          }}>
+            <Typography variant="h6" gutterBottom>
+              Nenhuma venda registrada
+            </Typography>
+            <Typography variant="body2">
+              Dados aparecerão aqui conforme comandas forem finalizadas
+            </Typography>
+          </Box>
         ) : (
           <Box sx={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dadosVendas}>
-                <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-                <XAxis 
-                  dataKey="mes" 
-                  stroke={theme.palette.text.secondary}
-                  fontSize={12}
-                />
-                <YAxis 
-                  stroke={theme.palette.text.secondary}
-                  fontSize={12}
-                  tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="vendas"
-                  stroke={theme.palette.primary.main}
-                  strokeWidth={3}
-                  dot={{ fill: theme.palette.primary.main, strokeWidth: 2, r: 6 }}
-                  name="Vendas Realizadas"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="meta"
-                  stroke={theme.palette.secondary.main}
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={{ fill: theme.palette.secondary.main, strokeWidth: 2, r: 4 }}
-                  name="Meta Mensal"
-                />
-              </LineChart>
+              {visualizacao === 'vendas' ? (
+                <LineChart data={dadosGrafico}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
+                  <XAxis 
+                    dataKey="data" 
+                    stroke={theme.palette.text.secondary}
+                    fontSize={12}
+                  />
+                  <YAxis 
+                    stroke={theme.palette.text.secondary}
+                    fontSize={12}
+                    tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="vendas"
+                    stroke={theme.palette.primary.main}
+                    strokeWidth={3}
+                    dot={{ fill: theme.palette.primary.main, strokeWidth: 2, r: 6 }}
+                    name="Vendas Realizadas"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="ticketMedio"
+                    stroke={theme.palette.secondary.main}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={{ fill: theme.palette.secondary.main, strokeWidth: 2, r: 4 }}
+                    name="Ticket Médio"
+                  />
+                </LineChart>
+              ) : (
+                <BarChart data={dadosGrafico}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
+                  <XAxis 
+                    dataKey="data" 
+                    stroke={theme.palette.text.secondary}
+                    fontSize={12}
+                  />
+                  <YAxis 
+                    stroke={theme.palette.text.secondary}
+                    fontSize={12}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar
+                    dataKey="comandas"
+                    fill={theme.palette.info.main}
+                    name="Comandas Fechadas"
+                  />
+                </BarChart>
+              )}
             </ResponsiveContainer>
           </Box>
         )}
 
         {/* Resumo estatístico */}
-        <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h6" color="primary" fontWeight="bold">
-                {formatCurrency(ultimoMes)}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Último Mês
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography 
-                variant="h6" 
-                color={crescimento >= 0 ? "success.main" : "error.main"} 
-                fontWeight="bold"
-              >
-                {crescimento >= 0 ? '+' : ''}{crescimento.toFixed(1)}%
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Crescimento
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h6" color="info.main" fontWeight="bold">
-                {formatCurrency(mediaMensal)}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Média Mensal
-              </Typography>
-            </Box>
+        {dadosGrafico.length > 0 && (
+          <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+            <Typography variant="body2" color="text.secondary" fontWeight="medium" gutterBottom>
+              Resumo do Período:
+            </Typography>
+            <Stack direction="row" spacing={2} flexWrap="wrap">
+              <Chip 
+                label={`Total: ${formatCurrency(totalVendas)}`}
+                color="primary"
+                variant="outlined"
+                size="small"
+              />
+              <Chip 
+                label={`${totalComandas} comandas`}
+                color="info"
+                variant="outlined"
+                size="small"
+              />
+              <Chip 
+                label={`Ticket médio: ${formatCurrency(ticketMedioGeral)}`}
+                color="secondary"
+                variant="outlined"
+                size="small"
+              />
+              {melhorDia.vendas > 0 && (
+                <Chip 
+                  label={`Melhor dia: ${melhorDia.data} (${formatCurrency(melhorDia.vendas)})`}
+                  color="success"
+                  variant="outlined"
+                  size="small"
+                />
+              )}
+            </Stack>
           </Box>
-        </Box>
+        )}
       </CardContent>
     </Card>
   )

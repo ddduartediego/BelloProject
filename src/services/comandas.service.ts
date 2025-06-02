@@ -612,6 +612,237 @@ class ComandasService extends BaseService {
       }
     }
   }
+
+  // Estatísticas avançadas para dashboard
+  async getEstatisticasAvancadas(
+    periodo: { inicio: string; fim: string },
+    profissionalId?: string
+  ): Promise<ServiceResponse<{
+    vendas: {
+      total: number
+      totalComandas: number
+      ticketMedio: number
+      crescimentoPercentual: number
+    }
+    porDia: Array<{
+      data: string
+      vendas: number
+      comandas: number
+    }>
+    porProfissional: Array<{
+      profissional: string
+      vendas: number
+      comandas: number
+      ticketMedio: number
+    }>
+    servicosPopulares: Array<{
+      servico: string
+      quantidade: number
+      valor: number
+    }>
+  }>> {
+    try {
+      const empresaId = await empresaService.getEmpresaAtualId()
+      if (!empresaId) {
+        return { data: null, error: 'Empresa não encontrada' }
+      }
+
+      // Query base para comandas do período
+      let query = this.supabase
+        .from('comanda')
+        .select(`
+          id,
+          data_abertura,
+          valor_total_pago,
+          status,
+          profissional_responsavel:id_profissional_responsavel(
+            id,
+            usuario_responsavel:id_usuario(nome_completo)
+          ),
+          itens:item_comanda(
+            id,
+            quantidade,
+            preco_total_item,
+            servico:id_servico(nome),
+            nome_servico_avulso
+          )
+        `)
+        .eq('id_empresa', empresaId)
+        .eq('status', 'FECHADA')
+        .gte('data_abertura', periodo.inicio)
+        .lte('data_abertura', periodo.fim)
+
+      if (profissionalId) {
+        query = query.eq('id_profissional_responsavel', profissionalId)
+      }
+
+      const { data: comandas, error } = await query
+
+      if (error) {
+        return { data: null, error: this.handleError(error) }
+      }
+
+      if (!comandas || comandas.length === 0) {
+        return {
+          data: {
+            vendas: { total: 0, totalComandas: 0, ticketMedio: 0, crescimentoPercentual: 0 },
+            porDia: [],
+            porProfissional: [],
+            servicosPopulares: []
+          },
+          error: null
+        }
+      }
+
+      // Calcular vendas totais
+      const vendas = {
+        total: comandas.reduce((sum, c) => sum + (c.valor_total_pago || 0), 0),
+        totalComandas: comandas.length,
+        ticketMedio: 0,
+        crescimentoPercentual: 0
+      }
+      vendas.ticketMedio = vendas.totalComandas > 0 ? vendas.total / vendas.totalComandas : 0
+
+      // Calcular crescimento vs período anterior
+      const diasPeriodo = Math.ceil(
+        (new Date(periodo.fim).getTime() - new Date(periodo.inicio).getTime()) / (1000 * 60 * 60 * 24)
+      )
+      const dataInicioAnterior = new Date(new Date(periodo.inicio).getTime() - diasPeriodo * 24 * 60 * 60 * 1000)
+      const dataFimAnterior = new Date(new Date(periodo.fim).getTime() - diasPeriodo * 24 * 60 * 60 * 1000)
+
+      const { data: estatisticasAnteriores } = await this.getEstatisticas({
+        inicio: dataInicioAnterior.toISOString(),
+        fim: dataFimAnterior.toISOString()
+      })
+
+      if (estatisticasAnteriores && estatisticasAnteriores.faturamentoTotal > 0) {
+        vendas.crescimentoPercentual = ((vendas.total - estatisticasAnteriores.faturamentoTotal) / estatisticasAnteriores.faturamentoTotal) * 100
+      }
+
+      // Agrupar vendas por dia
+      const vendasPorDia = comandas.reduce((acc, comanda) => {
+        const data = new Date(comanda.data_abertura).toISOString().split('T')[0]
+        if (!acc[data]) {
+          acc[data] = { vendas: 0, comandas: 0 }
+        }
+        acc[data].vendas += comanda.valor_total_pago || 0
+        acc[data].comandas += 1
+        return acc
+      }, {} as Record<string, { vendas: number; comandas: number }>)
+
+      const porDia = Object.entries(vendasPorDia).map(([data, stats]) => ({
+        data,
+        vendas: stats.vendas,
+        comandas: stats.comandas
+      })).sort((a, b) => a.data.localeCompare(b.data))
+
+      // Agrupar por profissional
+      const vendasPorProfissional = comandas.reduce((acc, comanda) => {
+        const profissional = (comanda.profissional_responsavel as any)?.usuario_responsavel?.nome_completo || 'Não identificado'
+        if (!acc[profissional]) {
+          acc[profissional] = { vendas: 0, comandas: 0 }
+        }
+        acc[profissional].vendas += comanda.valor_total_pago || 0
+        acc[profissional].comandas += 1
+        return acc
+      }, {} as Record<string, { vendas: number; comandas: number }>)
+
+      const porProfissional = Object.entries(vendasPorProfissional).map(([profissional, stats]) => ({
+        profissional,
+        vendas: stats.vendas,
+        comandas: stats.comandas,
+        ticketMedio: stats.comandas > 0 ? stats.vendas / stats.comandas : 0
+      })).sort((a, b) => b.vendas - a.vendas)
+
+      // Serviços mais populares
+      const servicosMap = comandas.reduce((acc, comanda) => {
+        comanda.itens?.forEach(item => {
+          const nomeServico = (item.servico as any)?.nome || item.nome_servico_avulso || 'Serviço avulso'
+          if (!acc[nomeServico]) {
+            acc[nomeServico] = { quantidade: 0, valor: 0 }
+          }
+          acc[nomeServico].quantidade += item.quantidade
+          acc[nomeServico].valor += item.preco_total_item
+        })
+        return acc
+      }, {} as Record<string, { quantidade: number; valor: number }>)
+
+      const servicosPopulares = Object.entries(servicosMap)
+        .map(([servico, stats]) => ({
+          servico,
+          quantidade: stats.quantidade,
+          valor: stats.valor
+        }))
+        .sort((a, b) => b.valor - a.valor)
+        .slice(0, 10)
+
+      return {
+        data: {
+          vendas,
+          porDia,
+          porProfissional,
+          servicosPopulares
+        },
+        error: null
+      }
+    } catch (err) {
+      return {
+        data: null,
+        error: this.handleError(err as Error)
+      }
+    }
+  }
+
+  // Métricas para período específico (hoje, semana, mês)
+  async getMetricasPeriodo(tipo: 'hoje' | 'semana' | 'mes'): Promise<ServiceResponse<{
+    faturamento: number
+    comandas: number
+    ticketMedio: number
+    crescimento: number
+  }>> {
+    try {
+      const hoje = new Date()
+      let dataInicio: Date
+      const dataFim = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59)
+
+      switch (tipo) {
+        case 'hoje':
+          dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0)
+          break
+        case 'semana':
+          const diaSemanaa = hoje.getDay()
+          dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - diaSemanaa, 0, 0, 0)
+          break
+        case 'mes':
+          dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1, 0, 0, 0)
+          break
+      }
+
+      const { data: estatisticas, error } = await this.getEstatisticasAvancadas({
+        inicio: dataInicio.toISOString(),
+        fim: dataFim.toISOString()
+      })
+
+      if (error || !estatisticas) {
+        return { data: null, error: error || 'Erro ao buscar métricas' }
+      }
+
+      return {
+        data: {
+          faturamento: estatisticas.vendas.total,
+          comandas: estatisticas.vendas.totalComandas,
+          ticketMedio: estatisticas.vendas.ticketMedio,
+          crescimento: estatisticas.vendas.crescimentoPercentual
+        },
+        error: null
+      }
+    } catch (err) {
+      return {
+        data: null,
+        error: this.handleError(err as Error)
+      }
+    }
+  }
 }
 
 const comandasService = new ComandasService()

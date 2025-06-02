@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Card,
   CardContent,
@@ -13,6 +13,8 @@ import {
   Chip,
   Divider,
   Stack,
+  CircularProgress,
+  Alert,
 } from '@mui/material'
 import {
   Person as PersonIcon,
@@ -20,72 +22,63 @@ import {
   Phone as PhoneIcon,
   CheckCircle as CheckIcon,
   Cancel as CancelIcon,
+  Pending as PendingIcon,
 } from '@mui/icons-material'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-
-// Dados simulados para demonstração
-const agendamentosHoje = [
-  {
-    id: 1,
-    cliente: 'Maria Silva',
-    telefone: '(11) 99999-1111',
-    horario: '09:00',
-    servico: 'Corte + Escova',
-    profissional: 'Ana Paula',
-    status: 'CONFIRMADO',
-    duracao: 90,
-  },
-  {
-    id: 2,
-    cliente: 'João Santos',
-    telefone: '(11) 99999-2222',
-    horario: '10:30',
-    servico: 'Corte Masculino',
-    profissional: 'Carlos',
-    status: 'PENDENTE',
-    duracao: 45,
-  },
-  {
-    id: 3,
-    cliente: 'Amanda Costa',
-    telefone: '(11) 99999-3333',
-    horario: '14:00',
-    servico: 'Coloração + Corte',
-    profissional: 'Ana Paula',
-    status: 'CONFIRMADO',
-    duracao: 180,
-  },
-  {
-    id: 4,
-    cliente: 'Pedro Oliveira',
-    telefone: '(11) 99999-4444',
-    horario: '16:00',
-    servico: 'Barba + Cabelo',
-    profissional: 'Carlos',
-    status: 'PENDENTE',
-    duracao: 75,
-  },
-  {
-    id: 5,
-    cliente: 'Lucia Ferreira',
-    telefone: '(11) 99999-5555',
-    horario: '18:30',
-    servico: 'Escova + Hidratação',
-    profissional: 'Ana Paula',
-    status: 'CONFIRMADO',
-    duracao: 120,
-  },
-]
+import { agendamentosService } from '@/services'
+import { AgendamentoComDetalhes, StatusAgendamento } from '@/types/database'
 
 interface AgendaHojeProps {
   title?: string
 }
 
 export default function AgendaHoje({ title = 'Agenda de Hoje' }: AgendaHojeProps) {
+  const [agendamentos, setAgendamentos] = useState<AgendamentoComDetalhes[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const hoje = new Date()
   
-  const getStatusColor = (status: string): 'success' | 'warning' | 'error' | 'default' => {
+  // Carregar agendamentos do dia
+  useEffect(() => {
+    const carregarAgendamentosHoje = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        // Buscar agendamentos do dia atual
+        const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0)
+        const fimHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59)
+
+        const { data, error: serviceError } = await agendamentosService.getAll(
+          { page: 1, limit: 20 },
+          {
+            dataInicio: inicioHoje.toISOString(),
+            dataFim: fimHoje.toISOString()
+          },
+          'data_hora_inicio'
+        )
+
+        if (serviceError) {
+          setError(serviceError)
+          return
+        }
+
+        // Verificar se data é paginada ou array direto
+        const agendamentosData = Array.isArray(data) ? data : data?.data || []
+        setAgendamentos(agendamentosData)
+      } catch (err) {
+        console.error('Erro ao carregar agendamentos:', err)
+        setError('Erro inesperado ao carregar agendamentos')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    carregarAgendamentosHoje()
+  }, [])
+
+  const getStatusColor = (status: StatusAgendamento): 'success' | 'warning' | 'error' | 'default' => {
     switch (status) {
       case 'CONFIRMADO':
         return 'success'
@@ -93,19 +86,39 @@ export default function AgendaHoje({ title = 'Agenda de Hoje' }: AgendaHojeProps
         return 'warning'
       case 'CANCELADO':
         return 'error'
+      case 'CONCLUIDO':
+        return 'success'
       default:
         return 'default'
     }
   }
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: StatusAgendamento) => {
     switch (status) {
       case 'CONFIRMADO':
+      case 'CONCLUIDO':
         return <CheckIcon fontSize="small" />
       case 'CANCELADO':
         return <CancelIcon fontSize="small" />
+      case 'PENDENTE':
+        return <PendingIcon fontSize="small" />
       default:
         return <TimeIcon fontSize="small" />
+    }
+  }
+
+  const getStatusText = (status: StatusAgendamento): string => {
+    switch (status) {
+      case 'CONFIRMADO':
+        return 'Confirmado'
+      case 'PENDENTE':
+        return 'Pendente'
+      case 'CANCELADO':
+        return 'Cancelado'
+      case 'CONCLUIDO':
+        return 'Concluído'
+      default:
+        return status
     }
   }
 
@@ -116,6 +129,15 @@ export default function AgendaHoje({ title = 'Agenda de Hoje' }: AgendaHojeProps
     const horaFim = Math.floor(fimEmMinutos / 60)
     const minutoFim = fimEmMinutos % 60
     return `${horaFim.toString().padStart(2, '0')}:${minutoFim.toString().padStart(2, '0')}`
+  }
+
+  // Calcular estatísticas
+  const estatisticas = {
+    total: agendamentos.length,
+    confirmados: agendamentos.filter(a => a.status === 'CONFIRMADO').length,
+    pendentes: agendamentos.filter(a => a.status === 'PENDENTE').length,
+    concluidos: agendamentos.filter(a => a.status === 'CONCLUIDO').length,
+    cancelados: agendamentos.filter(a => a.status === 'CANCELADO').length,
   }
 
   return (
@@ -133,111 +155,143 @@ export default function AgendaHoje({ title = 'Agenda de Hoje' }: AgendaHojeProps
         {/* Resumo do dia */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
           <Chip 
-            label={`${agendamentosHoje.length} agendamentos`}
+            label={`${estatisticas.total} agendamentos`}
             color="primary"
             variant="outlined"
             size="small"
           />
           <Chip 
-            label={`${agendamentosHoje.filter(a => a.status === 'CONFIRMADO').length} confirmados`}
+            label={`${estatisticas.confirmados} confirmados`}
             color="success"
             variant="outlined"
             size="small"
           />
           <Chip 
-            label={`${agendamentosHoje.filter(a => a.status === 'PENDENTE').length} pendentes`}
+            label={`${estatisticas.pendentes} pendentes`}
             color="warning"
             variant="outlined"
             size="small"
           />
+          {estatisticas.concluidos > 0 && (
+            <Chip 
+              label={`${estatisticas.concluidos} concluídos`}
+              color="info"
+              variant="outlined"
+              size="small"
+            />
+          )}
         </Box>
 
-        <List sx={{ maxHeight: 400, overflow: 'auto' }}>
-          {agendamentosHoje.map((agendamento, index) => (
-            <React.Fragment key={agendamento.id}>
-              <ListItem
-                sx={{
-                  borderRadius: 2,
-                  mb: 1,
-                  bgcolor: agendamento.status === 'CONFIRMADO' ? 'success.50' : 'background.paper',
-                  border: 1,
-                  borderColor: agendamento.status === 'CONFIRMADO' ? 'success.200' : 'divider',
-                }}
-              >
-                <ListItemAvatar>
-                  <Avatar sx={{ bgcolor: 'primary.main' }}>
-                    <PersonIcon />
-                  </Avatar>
-                </ListItemAvatar>
-                
-                {/* Estrutura manual sem ListItemText para evitar HTML inválido */}
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  {/* Nome do cliente e status */}
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ flex: 1 }}>
-                      {agendamento.cliente}
-                    </Typography>
-                    <Chip
-                      icon={getStatusIcon(agendamento.status)}
-                      label={agendamento.status}
-                      color={getStatusColor(agendamento.status)}
-                      size="small"
-                    />
-                  </Stack>
-
-                  {/* Detalhes do agendamento */}
-                  <Stack spacing={0.5}>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Serviço:</strong> {agendamento.servico}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Profissional:</strong> {agendamento.profissional}
-                    </Typography>
-                    
-                    {/* Horário e telefone */}
-                    <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
-                      <Stack direction="row" spacing={0.5} alignItems="center">
-                        <TimeIcon fontSize="small" color="action" />
-                        <Typography variant="caption">
-                          {agendamento.horario} - {calcularHorarioFim(agendamento.horario, agendamento.duracao)}
-                        </Typography>
-                      </Stack>
-                      <Stack direction="row" spacing={0.5} alignItems="center">
-                        <PhoneIcon fontSize="small" color="action" />
-                        <Typography variant="caption">
-                          {agendamento.telefone}
-                        </Typography>
-                      </Stack>
-                    </Stack>
-                  </Stack>
-                </Box>
-                
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="h6" fontWeight="bold" color="primary">
-                    {agendamento.horario}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {agendamento.duracao}min
-                  </Typography>
-                </Box>
-              </ListItem>
-              
-              {index < agendamentosHoje.length - 1 && <Divider sx={{ my: 1 }} />}
-            </React.Fragment>
-          ))}
-        </List>
-
-        {agendamentosHoje.length === 0 && (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <TimeIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary">
-              Nenhum agendamento para hoje
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Que tal aproveitar para organizar o salão?
+        {/* Estado de carregamento */}
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
+            <CircularProgress size={24} />
+            <Typography variant="body2" sx={{ ml: 2 }}>
+              Carregando agenda...
             </Typography>
           </Box>
         )}
+
+        {/* Estado de erro */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        {/* Lista de agendamentos */}
+        {!loading && !error && (
+          <>
+            {agendamentos.length === 0 ? (
+              <Box sx={{ 
+                textAlign: 'center', 
+                py: 4,
+                color: 'text.secondary'
+              }}>
+                <TimeIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+                <Typography variant="h6" gutterBottom>
+                  Nenhum agendamento hoje
+                </Typography>
+                <Typography variant="body2">
+                  Você está livre para organizar outros afazeres!
+                </Typography>
+              </Box>
+            ) : (
+              <List sx={{ maxHeight: 400, overflow: 'auto' }}>
+                {agendamentos.map((agendamento, index) => (
+                  <React.Fragment key={agendamento.id}>
+                    <ListItem sx={{ px: 0, py: 1 }}>
+                      <ListItemAvatar>
+                        <Avatar sx={{ bgcolor: 'primary.main' }}>
+                          <PersonIcon />
+                        </Avatar>
+                      </ListItemAvatar>
+                      
+                      <Box sx={{ flex: 1, ml: 1 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="body1" fontWeight="medium">
+                              {agendamento.cliente?.nome || 'Cliente não identificado'}
+                            </Typography>
+                            
+                            <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <TimeIcon fontSize="small" />
+                              {format(new Date(agendamento.data_hora_inicio), 'HH:mm')} - 
+                              {calcularHorarioFim(
+                                format(new Date(agendamento.data_hora_inicio), 'HH:mm'),
+                                agendamento.servicos?.[0]?.servico?.duracao_estimada_minutos || 60
+                              )}
+                            </Typography>
+                            
+                            <Typography variant="body2" color="text.secondary">
+                              {agendamento.servicos?.[0]?.servico?.nome || 'Serviço não identificado'}
+                            </Typography>
+                            
+                            <Typography variant="body2" color="text.secondary">
+                              Prof: {agendamento.profissional?.usuario?.nome_completo || 'Não identificado'}
+                            </Typography>
+
+                            {agendamento.cliente?.telefone && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <PhoneIcon fontSize="small" />
+                                {agendamento.cliente.telefone}
+                              </Typography>
+                            )}
+                          </Box>
+                          
+                          <Box sx={{ textAlign: 'right' }}>
+                            <Chip
+                              icon={getStatusIcon(agendamento.status)}
+                              label={getStatusText(agendamento.status)}
+                              color={getStatusColor(agendamento.status)}
+                              size="small"
+                              variant="outlined"
+                            />
+                            
+                            {agendamento.servicos?.[0]?.servico?.preco && (
+                              <Typography variant="caption" color="primary.main" fontWeight="medium" display="block" sx={{ mt: 0.5 }}>
+                                R$ {agendamento.servicos[0].servico.preco.toFixed(2).replace('.', ',')}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      </Box>
+                    </ListItem>
+                    
+                    {index < agendamentos.length - 1 && <Divider />}
+                  </React.Fragment>
+                ))}
+              </List>
+            )}
+          </>
+        )}
+
+        {/* Rodapé com última atualização */}
+        <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Typography variant="caption" color="text.secondary">
+            Última atualização: {format(new Date(), 'HH:mm:ss')}
+          </Typography>
+        </Box>
       </CardContent>
     </Card>
   )

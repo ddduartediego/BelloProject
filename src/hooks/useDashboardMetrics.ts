@@ -3,7 +3,8 @@ import {
   clientesService, 
   agendamentosService, 
   profissionaisService,
-  servicosService
+  servicosService,
+  comandasService
 } from '@/services'
 
 export interface DashboardMetrics {
@@ -12,6 +13,8 @@ export interface DashboardMetrics {
     totalMes: number
     totalAno: number
     percentualCrescimento: number
+    totalComandas: number
+    ticketMedio: number
   }
   agendamentos: {
     total: number
@@ -37,6 +40,12 @@ export interface DashboardMetrics {
     duracaoMedia: number
     porCategoria: Record<string, number>
   }
+  // Novos dados para métricas avançadas
+  vendaDetalhada?: {
+    porDia: Array<{ data: string; vendas: number; comandas: number }>
+    porProfissional: Array<{ profissional: string; vendas: number; comandas: number; ticketMedio: number }>
+    servicosPopulares: Array<{ servico: string; quantidade: number; valor: number }>
+  }
 }
 
 export interface UseDashboardMetricsReturn {
@@ -61,12 +70,18 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
         clientesStats,
         agendamentosStats,
         profissionaisStats,
-        servicosStats
+        servicosStats,
+        vendasHoje,
+        vendasMes,
+        vendasAno
       ] = await Promise.all([
         clientesService.getEstatisticas(),
         agendamentosService.getEstatisticas(),
         profissionaisService.getEstatisticas(),
-        servicosService.getEstatisticas()
+        servicosService.getEstatisticas(),
+        comandasService.getMetricasPeriodo('hoje'),
+        comandasService.getMetricasPeriodo('mes'),
+        comandasService.getMetricasPeriodo('mes') // Para o ano, usaremos mês por enquanto
       ])
 
       // Verificar se houve erros
@@ -75,14 +90,25 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
       if (profissionaisStats.error) throw new Error(profissionaisStats.error)
       if (servicosStats.error) throw new Error(servicosStats.error)
 
-      // Calcular métricas de vendas (por enquanto mockadas até implementar comandas)
-      // TODO: Implementar quando tiver service de comandas/vendas
+      // Calcular métricas de vendas REAIS baseadas em comandas
       const vendas = {
-        totalDia: 850.00,
-        totalMes: 12500.00,
-        totalAno: 98500.00,
-        percentualCrescimento: 15.8
+        totalDia: vendasHoje.data?.faturamento || 0,
+        totalMes: vendasMes.data?.faturamento || 0,
+        totalAno: vendasAno.data?.faturamento || 0, // Por enquanto usa o mês
+        percentualCrescimento: vendasMes.data?.crescimento || 0,
+        totalComandas: vendasMes.data?.comandas || 0,
+        ticketMedio: vendasMes.data?.ticketMedio || 0
       }
+
+      // Buscar dados detalhados para o mês atual
+      const hoje = new Date()
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+
+      const { data: vendaDetalhada } = await comandasService.getEstatisticasAvancadas({
+        inicio: inicioMes.toISOString(),
+        fim: fimMes.toISOString()
+      })
 
       // Montar objeto de métricas
       const dashboardMetrics: DashboardMetrics = {
@@ -90,7 +116,8 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
         agendamentos: agendamentosStats.data!,
         clientes: clientesStats.data!,
         profissionais: profissionaisStats.data!,
-        servicos: servicosStats.data!
+        servicos: servicosStats.data!,
+        vendaDetalhada: vendaDetalhada || undefined
       }
 
       setMetrics(dashboardMetrics)
