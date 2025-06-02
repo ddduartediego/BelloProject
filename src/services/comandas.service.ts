@@ -823,8 +823,30 @@ class ComandasService extends BaseService {
         fim: dataFim.toISOString()
       })
 
-      if (error || !estatisticas) {
-        return { data: null, error: error || 'Erro ao buscar métricas' }
+      if (error) {
+        // Retornar valores zerados em caso de erro
+        return {
+          data: {
+            faturamento: 0,
+            comandas: 0,
+            ticketMedio: 0,
+            crescimento: 0
+          },
+          error: null // Não propagar erro, apenas retornar zeros
+        }
+      }
+
+      if (!estatisticas) {
+        // Retornar valores zerados se não há dados
+        return {
+          data: {
+            faturamento: 0,
+            comandas: 0,
+            ticketMedio: 0,
+            crescimento: 0
+          },
+          error: null
+        }
       }
 
       return {
@@ -837,9 +859,15 @@ class ComandasService extends BaseService {
         error: null
       }
     } catch (err) {
+      // Retornar valores zerados em caso de exceção
       return {
-        data: null,
-        error: this.handleError(err as Error)
+        data: {
+          faturamento: 0,
+          comandas: 0,
+          ticketMedio: 0,
+          crescimento: 0
+        },
+        error: null // Não propagar erro, apenas retornar zeros
       }
     }
   }

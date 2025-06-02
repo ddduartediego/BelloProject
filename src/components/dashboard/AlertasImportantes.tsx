@@ -35,7 +35,7 @@ import {
   Storefront as SystemIcon,
 } from '@mui/icons-material'
 import { alertasService } from '@/services'
-import { Alerta, AlertasResumo } from '@/services/alertas.service'
+import type { Alerta, AlertasResumo } from '@/services/alertas.service'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -248,9 +248,9 @@ export default function AlertasImportantes({
                       <ListItemText
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                            <Typography variant="body2" fontWeight="medium">
+                            <Box component="span" sx={{ fontWeight: 'medium', fontSize: '0.875rem' }}>
                               {alerta.titulo}
-                            </Typography>
+                            </Box>
                             <Chip 
                               label={alerta.categoria}
                               size="small"
@@ -268,12 +268,12 @@ export default function AlertasImportantes({
                         }
                         secondary={
                           <Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem', mb: 1, display: 'block' }}>
                               {alerta.descricao}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            </Box>
+                            <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
                               {formatarTempoGerado(alerta.geradoEm)}
-                            </Typography>
+                            </Box>
                           </Box>
                         }
                       />
