@@ -57,18 +57,24 @@ export default function FiltrosRelatorio({ filtros, onChange }: FiltrosRelatorio
     onChange(novosFiltros)
   }
 
-  const handleDataInicioChange = (data: dayjs.Dayjs | null) => {
-    onChange({
-      ...filtros,
-      dataInicio: data?.toDate() || undefined,
-    })
+  const handleDataInicioChange = (data: any) => {
+    if (data) {
+      const date = dayjs(data).toDate()
+      onChange({
+        ...filtros,
+        dataInicio: date,
+      })
+    }
   }
 
-  const handleDataFimChange = (data: dayjs.Dayjs | null) => {
-    onChange({
-      ...filtros,
-      dataFim: data?.toDate() || undefined,
-    })
+  const handleDataFimChange = (data: any) => {
+    if (data) {
+      const date = dayjs(data).toDate()
+      onChange({
+        ...filtros,
+        dataFim: date,
+      })
+    }
   }
 
   const handleLimparFiltros = () => {

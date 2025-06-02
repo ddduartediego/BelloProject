@@ -6,6 +6,7 @@ import {
   servicosService,
   comandasService
 } from '@/services'
+import { DashboardFilters, PeriodoCalculado } from '@/contexts/DashboardFiltersContext'
 
 export interface DashboardMetrics {
   vendas: {
@@ -67,6 +68,19 @@ export interface DashboardMetrics {
       diasSemana: Array<{ diaSemana: string; agendamentos: number; percentual: number }>
     }
   }
+  // Dados de comparação
+  comparacao?: {
+    vendas: {
+      anterior: number
+      crescimento: number
+      crescimentoPercentual: number
+    }
+    agendamentos: {
+      anterior: number
+      crescimento: number
+      crescimentoPercentual: number
+    }
+  }
 }
 
 export interface UseDashboardMetricsReturn {
@@ -76,7 +90,17 @@ export interface UseDashboardMetricsReturn {
   refreshMetrics: () => Promise<void>
 }
 
-export function useDashboardMetrics(): UseDashboardMetricsReturn {
+interface UseDashboardMetricsProps {
+  filters?: Partial<DashboardFilters>
+  periodoAtual?: PeriodoCalculado
+  periodoComparacao?: PeriodoCalculado | null
+}
+
+export function useDashboardMetrics(options?: {
+  filters?: any
+  periodoAtual?: any
+  periodoComparacao?: any
+}): UseDashboardMetricsReturn {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -86,6 +110,14 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
       setLoading(true)
       setError(null)
 
+      // Determinar período a usar (filtros ou padrão)
+      const hoje = new Date()
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+
+      const periodoInicio = options?.periodoAtual?.inicio || inicioMes
+      const periodoFim = options?.periodoAtual?.fim || fimMes
+
       // Buscar todas as métricas em paralelo para melhor performance
       const [
         clientesStats,
@@ -93,7 +125,7 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
         profissionaisStats,
         servicosStats,
         vendasHoje,
-        vendasMes,
+        vendasPeriodo,
         vendasAno
       ] = await Promise.all([
         clientesService.getEstatisticas(),
@@ -101,7 +133,10 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
         profissionaisService.getEstatisticas(),
         servicosService.getEstatisticas(),
         comandasService.getMetricasPeriodo('hoje'),
-        comandasService.getMetricasPeriodo('mes'),
+        comandasService.getEstatisticas({
+          inicio: periodoInicio.toISOString(),
+          fim: periodoFim.toISOString()
+        }),
         comandasService.getMetricasPeriodo('mes') // Para o ano, usaremos mês por enquanto
       ])
 
@@ -114,21 +149,20 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
       // Calcular métricas de vendas REAIS baseadas em comandas
       const vendas = {
         totalDia: vendasHoje.data?.faturamento || 0,
-        totalMes: vendasMes.data?.faturamento || 0,
+        totalMes: vendasPeriodo.data?.faturamentoTotal || 0,
         totalAno: vendasAno.data?.faturamento || 0, // Por enquanto usa o mês
-        percentualCrescimento: vendasMes.data?.crescimento || 0,
-        totalComandas: vendasMes.data?.comandas || 0,
-        ticketMedio: vendasMes.data?.ticketMedio || 0
+        percentualCrescimento: 0, // Calcularemos com comparação
+        totalComandas: vendasPeriodo.data?.totalComandas || 0,
+        ticketMedio: vendasPeriodo.data?.ticketMedio || 0
       }
 
-      // Buscar dados detalhados para o mês atual
-      const hoje = new Date()
-      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
-
+      // Buscar dados detalhados para o período filtrado
       const { data: vendaDetalhada } = await comandasService.getEstatisticasAvancadas({
-        inicio: inicioMes.toISOString(),
-        fim: fimMes.toISOString()
+        inicio: periodoInicio.toISOString(),
+        fim: periodoFim.toISOString(),
+        ...(options?.filters?.profissionalSelecionado && { 
+          profissionalId: options.filters.profissionalSelecionado 
+        })
       })
 
       // Buscar métricas de performance avançadas
@@ -138,18 +172,54 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
         horariosPicoData
       ] = await Promise.all([
         agendamentosService.getTaxaRetornoClientes({
-          inicio: inicioMes.toISOString(),
-          fim: fimMes.toISOString()
+          inicio: periodoInicio.toISOString(),
+          fim: periodoFim.toISOString()
         }),
         agendamentosService.getOcupacaoProfissionais({
-          inicio: inicioMes.toISOString(),
-          fim: fimMes.toISOString()
+          inicio: periodoInicio.toISOString(),
+          fim: periodoFim.toISOString()
         }),
         agendamentosService.getHorariosPico({
-          inicio: inicioMes.toISOString(),
-          fim: fimMes.toISOString()
+          inicio: periodoInicio.toISOString(),
+          fim: periodoFim.toISOString()
         })
       ])
+
+      // Buscar dados de comparação se período de comparação existe
+      let comparacao: DashboardMetrics['comparacao'] | undefined
+      if (options?.periodoComparacao) {
+        const [vendasComparacao, agendamentosComparacao] = await Promise.all([
+          comandasService.getEstatisticas({
+            inicio: options.periodoComparacao.inicio.toISOString(),
+            fim: options.periodoComparacao.fim.toISOString()
+          }),
+          agendamentosService.getAll(
+            { page: 1, limit: 1 }, // Só precisamos do count
+            {
+              dataInicio: options.periodoComparacao.inicio.toISOString(),
+              dataFim: options.periodoComparacao.fim.toISOString()
+            }
+          )
+        ])
+
+        const vendasAtual = vendasPeriodo.data?.faturamentoTotal || 0
+        const vendasAnterior = vendasComparacao.data?.faturamentoTotal || 0
+        const agendamentosAtual = agendamentosStats.data?.total || 0
+        const agendamentosAnterior = agendamentosComparacao.data?.total || 0
+
+        comparacao = {
+          vendas: {
+            anterior: vendasAnterior,
+            crescimento: vendasAtual - vendasAnterior,
+            crescimentoPercentual: vendasAnterior > 0 ? ((vendasAtual - vendasAnterior) / vendasAnterior) * 100 : 0
+          },
+          agendamentos: {
+            anterior: agendamentosAnterior,
+            crescimento: agendamentosAtual - agendamentosAnterior,
+            crescimentoPercentual: agendamentosAnterior > 0 ? ((agendamentosAtual - agendamentosAnterior) / agendamentosAnterior) * 100 : 0
+          }
+        }
+      }
 
       // Montar objeto de métricas de performance
       const performance = {
@@ -181,7 +251,8 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
         profissionais: profissionaisStats.data!,
         servicos: servicosStats.data!,
         vendaDetalhada: vendaDetalhada || undefined,
-        performance
+        performance,
+        comparacao
       }
 
       setMetrics(dashboardMetrics)
@@ -198,10 +269,10 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
     await fetchMetrics()
   }
 
-  // Carregar métricas na inicialização
+  // Carregar métricas na inicialização ou quando filtros mudarem
   useEffect(() => {
     fetchMetrics()
-  }, [])
+  }, [options?.filters, options?.periodoAtual, options?.periodoComparacao])
 
   return {
     metrics,

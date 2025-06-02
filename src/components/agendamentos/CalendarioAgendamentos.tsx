@@ -162,9 +162,11 @@ export default function CalendarioAgendamentos({
     ).length
   }
 
-  const handleDateChange = (date: Dayjs | null) => {
+  const handleDateChange = (date: any) => {
     if (date) {
-      onDateSelect(date)
+      const dayJsDate = dayjs(date)
+      setViewDate(dayJsDate)
+      onDateSelect(dayJsDate)
     }
   }
 

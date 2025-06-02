@@ -30,11 +30,31 @@ import AlertasImportantes from '@/components/dashboard/AlertasImportantes'
 import MetricasPerformance from '@/components/dashboard/MetricasPerformance'
 import HorariosPico from '@/components/dashboard/HorariosPico'
 import useDashboardMetrics from '@/hooks/useDashboardMetrics'
+import { DashboardFiltersProvider, useDashboardFilters } from '@/contexts/DashboardFiltersContext'
+import DashboardFilters from '@/components/dashboard/DashboardFilters'
 
 export default function DashboardPage() {
+  return (
+    <DashboardFiltersProvider>
+      <DashboardContent />
+    </DashboardFiltersProvider>
+  )
+}
+
+function DashboardContent() {
   const router = useRouter()
   const { user, usuario, isAuthenticated, loading } = useAuth()
-  const { metrics, loading: metricsLoading, error: metricsError, refreshMetrics } = useDashboardMetrics()
+  const { filters, periodoAtual, periodoComparacao } = useDashboardFilters()
+  const { 
+    metrics, 
+    loading: metricsLoading, 
+    error: metricsError, 
+    refreshMetrics 
+  } = useDashboardMetrics({
+    filters,
+    periodoAtual,
+    periodoComparacao
+  })
 
   // Verificar autenticação e redirecionar se necessário
   useEffect(() => {
@@ -80,6 +100,9 @@ export default function DashboardPage() {
             {metricsLoading ? <CircularProgress size={24} /> : <RefreshIcon />}
           </IconButton>
         </Box>
+
+        {/* Filtros do Dashboard */}
+        <DashboardFilters onFiltersChange={refreshMetrics} />
 
         {/* Erro ao carregar métricas */}
         {metricsError && (
