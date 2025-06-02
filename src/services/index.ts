@@ -22,6 +22,7 @@ export { default as caixaService } from './caixa.service'
 export { default as itensComandaService } from './itensComanda.service'
 export { default as movimentacoesCaixaService } from './movimentacoesCaixa.service'
 export { default as alertasService } from './alertas.service'
+export { default as analiseDadosService } from './analiseDadosService'
 
 // Exportar tipos
 export type { CreateAgendamentoData, UpdateAgendamentoData, AgendamentoFilters } from './agendamentos.service'

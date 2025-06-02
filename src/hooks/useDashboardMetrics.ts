@@ -7,6 +7,8 @@ import {
   comandasService
 } from '@/services'
 import { DashboardFilters, PeriodoCalculado } from '@/contexts/DashboardFiltersContext'
+import useDashboardCache from './useDashboardCache'
+import { useDebouncedCallback } from './useDebounce'
 
 export interface DashboardMetrics {
   vendas: {
@@ -105,10 +107,46 @@ export function useDashboardMetrics(options?: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Sistema de cache
+  const cache = useDashboardCache({
+    maxAge: 5 * 60 * 1000, // 5 minutos
+    maxSize: 50
+  })
+
+  // Função para gerar chave de cache baseada nos filtros
+  const generateCacheKey = (filters?: any, periodoAtual?: any, periodoComparacao?: any) => {
+    const keyParts = [
+      filters?.periodoPreset || 'default',
+      filters?.profissionalSelecionado || 'all',
+      filters?.clienteSelecionado || 'all',
+      filters?.tipoMetrica || 'todas',
+      periodoAtual?.inicio?.toISOString() || '',
+      periodoAtual?.fim?.toISOString() || '',
+      periodoComparacao?.inicio?.toISOString() || '',
+      filters?.exibirComparacao ? 'comp' : 'nocomp'
+    ]
+    return keyParts.join('|')
+  }
+
   const fetchMetrics = async () => {
     try {
       setLoading(true)
       setError(null)
+
+      // Gerar chave de cache baseada nos filtros
+      const cacheKey = generateCacheKey(
+        options?.filters,
+        options?.periodoAtual,
+        options?.periodoComparacao
+      )
+
+      // Verificar se temos dados em cache
+      const cachedData = cache.getCachedData(cacheKey)
+      if (cachedData && !cache.isDataStale(cacheKey)) {
+        setMetrics(cachedData)
+        setLoading(false)
+        return
+      }
 
       // Determinar período a usar (filtros ou padrão)
       const hoje = new Date()
@@ -255,6 +293,13 @@ export function useDashboardMetrics(options?: {
         comparacao
       }
 
+      // Salvar no cache
+      cache.setCachedData(cacheKey, dashboardMetrics, {
+        filters: options?.filters,
+        periodoAtual: options?.periodoAtual,
+        periodoComparacao: options?.periodoComparacao
+      })
+
       setMetrics(dashboardMetrics)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar métricas'
@@ -265,13 +310,23 @@ export function useDashboardMetrics(options?: {
     }
   }
 
+  // Debounced refresh para evitar múltiplas chamadas
+  const debouncedFetchMetrics = useDebouncedCallback(fetchMetrics, 300)
+
   const refreshMetrics = async () => {
+    // Para refresh manual, sempre invalidar cache
+    const cacheKey = generateCacheKey(
+      options?.filters,
+      options?.periodoAtual,
+      options?.periodoComparacao
+    )
+    cache.invalidateCache(cacheKey)
     await fetchMetrics()
   }
 
-  // Carregar métricas na inicialização ou quando filtros mudarem
+  // Carregar métricas na inicialização ou quando filtros mudarem (com debounce)
   useEffect(() => {
-    fetchMetrics()
+    debouncedFetchMetrics()
   }, [options?.filters, options?.periodoAtual, options?.periodoComparacao])
 
   return {
