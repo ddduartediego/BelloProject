@@ -93,6 +93,11 @@ export default function ComandasPage() {
     error: caixasError
   } = useCaixas()
 
+  // Verificar se há caixa aberto para habilitar criação de comandas
+  const temCaixaAberto = caixas.some(c => c.status === 'ABERTO')
+  const caixaAbertoSelecionado = caixaSelecionado?.status === 'ABERTO'
+  const podeNovaComanda = temCaixaAberto && caixaAbertoSelecionado
+
   // Função para mostrar notificação
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
     setSnackbar({ open: true, message, severity })
@@ -484,7 +489,7 @@ export default function ComandasPage() {
             </Box>
           </Box>
 
-          {!isMobile && (
+          {!isMobile && podeNovaComanda && (
             <Button
               variant="contained"
               startIcon={<AddIcon />}
@@ -503,8 +508,11 @@ export default function ComandasPage() {
         </Box>
 
         {/* Filtros */}
-        <Box sx={{ mb: 3 }}>
-          <Grid container spacing={2} alignItems="center">
+        <Paper sx={{ p: 3, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
+            Filtros
+          </Typography>
+          <Grid container spacing={2} alignItems="stretch">
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">
                 <InputLabel>Status</InputLabel>
@@ -534,6 +542,7 @@ export default function ComandasPage() {
                 loading={caixasLoading}
                 error={caixasError}
                 size="small"
+                label="Filtrar por Caixa"
               />
             </Grid>
 
@@ -561,12 +570,30 @@ export default function ComandasPage() {
                   setCaixaSelecionado(caixaSelecionado)
                 }}
                 size="small"
+                sx={{ height: '100%' }}
               >
                 Limpar
               </Button>
             </Grid>
           </Grid>
-        </Box>
+
+          {/* Aviso quando não há caixa aberto */}
+          {!podeNovaComanda && (
+            <Box sx={{ 
+              mt: 2, 
+              p: 2, 
+              borderRadius: 1, 
+              bgcolor: 'warning.light', 
+              color: 'warning.contrastText'
+            }}>
+              <Typography variant="body2" fontWeight="medium">
+                ⚠️ {!temCaixaAberto 
+                  ? 'Nenhum caixa aberto. Abra um caixa para criar novas comandas.' 
+                  : 'Selecione um caixa aberto para criar novas comandas.'}
+              </Typography>
+            </Box>
+          )}
+        </Paper>
 
         {/* Lista de Comandas */}
         <Grid container spacing={3}>
@@ -681,7 +708,7 @@ export default function ComandasPage() {
         </Grid>
 
         {/* Floating Action Button para mobile */}
-        {isMobile && (
+        {isMobile && podeNovaComanda && (
           <Fab
             color="primary"
             aria-label="nova comanda"

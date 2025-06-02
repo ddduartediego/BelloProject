@@ -167,3 +167,91 @@ const calcularSaldoCaixa = useCallback((
 - Documentação detalhada acelera manutenção futura
 
 **🎉 CORREÇÃO FINALIZADA E PRONTA PARA PRODUÇÃO! 🎉**
+
+---
+
+## 🔧 **CORREÇÃO ADICIONAL - LAYOUT E REGRAS COMANDAS**
+
+### **📋 PROBLEMAS IDENTIFICADOS NA TELA DE COMANDAS:**
+
+**1. Layout com Sobreposição:**
+- Campos de filtro se sobrepondo causando má experiência
+- Falta de estrutura visual clara para os filtros
+- Alinhamento inconsistente dos elementos
+
+**2. Regra de Negócio Incorreta:**
+- Botão "Nova Comanda" aparecia sempre
+- Deveria aparecer apenas com caixa aberto selecionado
+
+### **🛠️ CORREÇÕES IMPLEMENTADAS:**
+
+**1. ✅ Layout Reorganizado:**
+```typescript
+// Filtros em Paper container organizado
+<Paper sx={{ p: 3, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+  <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>Filtros</Typography>
+  <Grid container spacing={2} alignItems="stretch">
+    // Campos organizados com espaçamento adequado
+  </Grid>
+</Paper>
+```
+
+**2. ✅ Verificação de Caixa Aberto:**
+```typescript
+// Lógica para verificar se pode criar comandas
+const temCaixaAberto = caixas.some(c => c.status === 'ABERTO')
+const caixaAbertoSelecionado = caixaSelecionado?.status === 'ABERTO'
+const podeNovaComanda = temCaixaAberto && caixaAbertoSelecionado
+```
+
+**3. ✅ Botões Condicionais:**
+```typescript
+// Botão desktop
+{!isMobile && podeNovaComanda && (
+  <Button>Nova Comanda</Button>
+)}
+
+// FAB mobile
+{isMobile && podeNovaComanda && (
+  <Fab>Nova Comanda</Fab>
+)}
+```
+
+**4. ✅ Aviso Informativo:**
+```typescript
+// Aviso quando não pode criar comandas
+{!podeNovaComanda && (
+  <Box sx={{ bgcolor: 'warning.light' }}>
+    ⚠️ {!temCaixaAberto 
+      ? 'Nenhum caixa aberto. Abra um caixa para criar novas comandas.' 
+      : 'Selecione um caixa aberto para criar novas comandas.'}
+  </Box>
+)}
+```
+
+### **📊 MELHORIAS OBTIDAS:**
+
+**Interface:**
+- ✅ **Layout organizado** em container Paper
+- ✅ **Alinhamento consistente** dos filtros
+- ✅ **Espaçamento adequado** entre elementos
+- ✅ **Visual hierárquico** com título de seção
+
+**Experiência do Usuário:**
+- ✅ **Feedback claro** sobre disponibilidade
+- ✅ **Prevenção de erros** escondendo ações indisponíveis
+- ✅ **Orientação visual** com avisos informativos
+- ✅ **Responsividade** mantida em todos os dispositivos
+
+**Regras de Negócio:**
+- ✅ **Validação correta** de caixa aberto
+- ✅ **Controle de acesso** baseado em estado
+- ✅ **Consistência** entre desktop e mobile
+
+### **🎯 RESULTADO FINAL:**
+- ✅ **Layout limpo** sem sobreposições
+- ✅ **Regras aplicadas** corretamente
+- ✅ **UX melhorada** com feedback adequado
+- ✅ **Código organizado** e manutenível
+
+**🎉 SISTEMAS DE CAIXA E COMANDAS COMPLETAMENTE OTIMIZADOS! 🎉**
