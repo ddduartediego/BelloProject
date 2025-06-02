@@ -46,6 +46,27 @@ export interface DashboardMetrics {
     porProfissional: Array<{ profissional: string; vendas: number; comandas: number; ticketMedio: number }>
     servicosPopulares: Array<{ servico: string; quantidade: number; valor: number }>
   }
+  // Métricas de performance avançadas
+  performance?: {
+    taxaRetorno: {
+      percentual: number
+      clientesTotais: number
+      clientesRecorrentes: number
+    }
+    ocupacao: {
+      media: number
+      profissionais: Array<{
+        nome: string
+        ocupacao: number
+        horasAgendadas: number
+        totalAgendamentos: number
+      }>
+    }
+    horariosPico: {
+      horarios: Array<{ hora: string; agendamentos: number; percentual: number }>
+      diasSemana: Array<{ diaSemana: string; agendamentos: number; percentual: number }>
+    }
+  }
 }
 
 export interface UseDashboardMetricsReturn {
@@ -110,6 +131,48 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
         fim: fimMes.toISOString()
       })
 
+      // Buscar métricas de performance avançadas
+      const [
+        taxaRetornoData,
+        ocupacaoData,
+        horariosPicoData
+      ] = await Promise.all([
+        agendamentosService.getTaxaRetornoClientes({
+          inicio: inicioMes.toISOString(),
+          fim: fimMes.toISOString()
+        }),
+        agendamentosService.getOcupacaoProfissionais({
+          inicio: inicioMes.toISOString(),
+          fim: fimMes.toISOString()
+        }),
+        agendamentosService.getHorariosPico({
+          inicio: inicioMes.toISOString(),
+          fim: fimMes.toISOString()
+        })
+      ])
+
+      // Montar objeto de métricas de performance
+      const performance = {
+        taxaRetorno: {
+          percentual: taxaRetornoData.data?.taxaRetorno || 0,
+          clientesTotais: taxaRetornoData.data?.clientesTotais || 0,
+          clientesRecorrentes: taxaRetornoData.data?.clientesRecorrentes || 0
+        },
+        ocupacao: {
+          media: ocupacaoData.data?.ocupacaoMedia || 0,
+          profissionais: ocupacaoData.data?.profissionais?.map(p => ({
+            nome: p.nome,
+            ocupacao: p.ocupacao,
+            horasAgendadas: p.horasAgendadas,
+            totalAgendamentos: p.totalAgendamentos
+          })) || []
+        },
+        horariosPico: {
+          horarios: horariosPicoData.data?.horariosPopulares || [],
+          diasSemana: horariosPicoData.data?.diasSemanaPopulares || []
+        }
+      }
+
       // Montar objeto de métricas
       const dashboardMetrics: DashboardMetrics = {
         vendas,
@@ -117,7 +180,8 @@ export function useDashboardMetrics(): UseDashboardMetricsReturn {
         clientes: clientesStats.data!,
         profissionais: profissionaisStats.data!,
         servicos: servicosStats.data!,
-        vendaDetalhada: vendaDetalhada || undefined
+        vendaDetalhada: vendaDetalhada || undefined,
+        performance
       }
 
       setMetrics(dashboardMetrics)

@@ -413,6 +413,306 @@ class AgendamentosService extends BaseService {
       }
     }
   }
+
+  // Métricas avançadas para dashboard de performance
+  async getTaxaRetornoClientes(periodo?: { inicio: string; fim: string }): Promise<ServiceResponse<{
+    taxaRetorno: number
+    clientesTotais: number
+    clientesRecorrentes: number
+    detalhes: Array<{
+      clienteId: string
+      nome: string
+      totalAgendamentos: number
+      ultimoAgendamento: string
+    }>
+  }>> {
+    try {
+      const empresaId = await empresaService.getEmpresaAtualId()
+      if (!empresaId) {
+        return { data: null, error: 'Empresa não encontrada' }
+      }
+
+      let query = this.supabase
+        .from('agendamento')
+        .select(`
+          id_cliente,
+          data_hora_inicio,
+          cliente (nome)
+        `)
+        .eq('id_empresa', empresaId)
+        .in('status', ['CONFIRMADO', 'CONCLUIDO'])
+        .not('id_cliente', 'is', null)
+
+      if (periodo) {
+        query = query
+          .gte('data_hora_inicio', periodo.inicio)
+          .lte('data_hora_inicio', periodo.fim)
+      }
+
+      const { data: agendamentos, error } = await query
+
+      if (error) {
+        return { data: null, error: this.handleError(error) }
+      }
+
+      if (!agendamentos || agendamentos.length === 0) {
+        return {
+          data: {
+            taxaRetorno: 0,
+            clientesTotais: 0,
+            clientesRecorrentes: 0,
+            detalhes: []
+          },
+          error: null
+        }
+      }
+
+      // Agrupar agendamentos por cliente
+      const clientesMap = agendamentos.reduce((acc, agendamento) => {
+        const clienteId = agendamento.id_cliente
+        if (!acc[clienteId]) {
+          acc[clienteId] = {
+            clienteId,
+            nome: (agendamento.cliente as any)?.nome || 'Cliente sem nome',
+            agendamentos: []
+          }
+        }
+        acc[clienteId].agendamentos.push(agendamento.data_hora_inicio)
+        return acc
+      }, {} as Record<string, { clienteId: string; nome: string; agendamentos: string[] }>)
+
+      // Calcular métricas
+      const clientes = Object.values(clientesMap)
+      const clientesTotais = clientes.length
+      const clientesRecorrentes = clientes.filter(c => c.agendamentos.length > 1).length
+      const taxaRetorno = clientesTotais > 0 ? (clientesRecorrentes / clientesTotais) * 100 : 0
+
+      const detalhes = clientes.map(cliente => ({
+        clienteId: cliente.clienteId,
+        nome: cliente.nome,
+        totalAgendamentos: cliente.agendamentos.length,
+        ultimoAgendamento: cliente.agendamentos.sort().reverse()[0]
+      })).sort((a, b) => b.totalAgendamentos - a.totalAgendamentos)
+
+      return {
+        data: {
+          taxaRetorno,
+          clientesTotais,
+          clientesRecorrentes,
+          detalhes
+        },
+        error: null
+      }
+    } catch (err) {
+      return {
+        data: null,
+        error: this.handleError(err as Error)
+      }
+    }
+  }
+
+  // Métricas de ocupação dos profissionais
+  async getOcupacaoProfissionais(periodo?: { inicio: string; fim: string }): Promise<ServiceResponse<{
+    ocupacaoMedia: number
+    profissionais: Array<{
+      profissionalId: string
+      nome: string
+      horasAgendadas: number
+      horasDisponiveis: number
+      ocupacao: number
+      totalAgendamentos: number
+    }>
+  }>> {
+    try {
+      const empresaId = await empresaService.getEmpresaAtualId()
+      if (!empresaId) {
+        return { data: null, error: 'Empresa não encontrada' }
+      }
+
+      // Buscar profissionais da empresa
+      const { data: profissionais, error: profError } = await this.supabase
+        .from('profissional')
+        .select(`
+          id,
+          usuario (nome_completo),
+          horarios_trabalho
+        `)
+        .eq('id_empresa', empresaId)
+
+      if (profError || !profissionais) {
+        return { data: null, error: 'Erro ao buscar profissionais' }
+      }
+
+      // Buscar agendamentos dos profissionais no período
+      let agendamentosQuery = this.supabase
+        .from('agendamento')
+        .select(`
+          id_profissional,
+          data_hora_inicio,
+          data_hora_fim,
+          agendamento_servico (servico (duracao_estimada_minutos))
+        `)
+        .eq('id_empresa', empresaId)
+        .in('status', ['CONFIRMADO', 'CONCLUIDO'])
+
+      if (periodo) {
+        agendamentosQuery = agendamentosQuery
+          .gte('data_hora_inicio', periodo.inicio)
+          .lte('data_hora_inicio', periodo.fim)
+      }
+
+      const { data: agendamentos, error: agendError } = await agendamentosQuery
+
+      if (agendError) {
+        return { data: null, error: this.handleError(agendError) }
+      }
+
+      // Calcular métricas por profissional
+      const profissionaisMetricas = profissionais.map(prof => {
+        const agendamentosProf = agendamentos?.filter(a => a.id_profissional === prof.id) || []
+        
+        // Calcular horas agendadas (considerando duração dos serviços)
+        const horasAgendadas = agendamentosProf.reduce((total, agendamento) => {
+          const duracao = (agendamento.agendamento_servico as any)?.[0]?.servico?.duracao_estimada_minutos || 60
+          return total + (duracao / 60)
+        }, 0)
+
+        // Horas disponíveis (exemplo: 8h por dia útil no período)
+        // TODO: Usar horarios_trabalho do profissional para cálculo mais preciso
+        const diasUteis = periodo ? 
+          Math.ceil((new Date(periodo.fim).getTime() - new Date(periodo.inicio).getTime()) / (1000 * 60 * 60 * 24)) * 0.7 : // ~70% são dias úteis
+          30 * 0.7 // último mês
+
+        const horasDisponiveis = diasUteis * 8 // 8h por dia útil
+
+        const ocupacao = horasDisponiveis > 0 ? (horasAgendadas / horasDisponiveis) * 100 : 0
+
+        return {
+          profissionalId: prof.id,
+          nome: (prof.usuario as any)?.nome_completo || 'Profissional sem nome',
+          horasAgendadas: Math.round(horasAgendadas * 10) / 10,
+          horasDisponiveis: Math.round(horasDisponiveis * 10) / 10,
+          ocupacao: Math.round(ocupacao * 10) / 10,
+          totalAgendamentos: agendamentosProf.length
+        }
+      })
+
+      const ocupacaoMedia = profissionaisMetricas.length > 0 
+        ? profissionaisMetricas.reduce((sum, p) => sum + p.ocupacao, 0) / profissionaisMetricas.length
+        : 0
+
+      return {
+        data: {
+          ocupacaoMedia: Math.round(ocupacaoMedia * 10) / 10,
+          profissionais: profissionaisMetricas.sort((a, b) => b.ocupacao - a.ocupacao)
+        },
+        error: null
+      }
+    } catch (err) {
+      return {
+        data: null,
+        error: this.handleError(err as Error)
+      }
+    }
+  }
+
+  // Análise de horários de pico
+  async getHorariosPico(periodo?: { inicio: string; fim: string }): Promise<ServiceResponse<{
+    horariosPopulares: Array<{
+      hora: string
+      agendamentos: number
+      percentual: number
+    }>
+    diasSemanaPopulares: Array<{
+      diaSemana: string
+      agendamentos: number
+      percentual: number
+    }>
+  }>> {
+    try {
+      const empresaId = await empresaService.getEmpresaAtualId()
+      if (!empresaId) {
+        return { data: null, error: 'Empresa não encontrada' }
+      }
+
+      let query = this.supabase
+        .from('agendamento')
+        .select('data_hora_inicio')
+        .eq('id_empresa', empresaId)
+        .in('status', ['CONFIRMADO', 'CONCLUIDO'])
+
+      if (periodo) {
+        query = query
+          .gte('data_hora_inicio', periodo.inicio)
+          .lte('data_hora_inicio', periodo.fim)
+      }
+
+      const { data: agendamentos, error } = await query
+
+      if (error || !agendamentos) {
+        return { data: null, error: this.handleError(error) || 'Nenhum agendamento encontrado' }
+      }
+
+      const totalAgendamentos = agendamentos.length
+
+      if (totalAgendamentos === 0) {
+        return {
+          data: {
+            horariosPopulares: [],
+            diasSemanaPopulares: []
+          },
+          error: null
+        }
+      }
+
+      // Agrupar por hora
+      const horarios = agendamentos.reduce((acc, agendamento) => {
+        const hora = new Date(agendamento.data_hora_inicio).getHours()
+        const horaFormatada = `${hora.toString().padStart(2, '0')}:00`
+        acc[horaFormatada] = (acc[horaFormatada] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+
+      // Agrupar por dia da semana
+      const diasSemana = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+      const diasMap = agendamentos.reduce((acc, agendamento) => {
+        const diaSemana = new Date(agendamento.data_hora_inicio).getDay()
+        const diaNome = diasSemana[diaSemana]
+        acc[diaNome] = (acc[diaNome] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+
+      const horariosPopulares = Object.entries(horarios)
+        .map(([hora, count]) => ({
+          hora,
+          agendamentos: count,
+          percentual: Math.round((count / totalAgendamentos) * 100 * 10) / 10
+        }))
+        .sort((a, b) => b.agendamentos - a.agendamentos)
+        .slice(0, 10)
+
+      const diasSemanaPopulares = Object.entries(diasMap)
+        .map(([diaSemana, count]) => ({
+          diaSemana,
+          agendamentos: count,
+          percentual: Math.round((count / totalAgendamentos) * 100 * 10) / 10
+        }))
+        .sort((a, b) => b.agendamentos - a.agendamentos)
+
+      return {
+        data: {
+          horariosPopulares,
+          diasSemanaPopulares
+        },
+        error: null
+      }
+    } catch (err) {
+      return {
+        data: null,
+        error: this.handleError(err as Error)
+      }
+    }
+  }
 }
 
 export const agendamentosService = new AgendamentosService()

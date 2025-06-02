@@ -27,6 +27,8 @@ import LoadingScreen from '@/components/common/LoadingScreen'
 import VendasChart from '@/components/dashboard/VendasChart'
 import AgendaHoje from '@/components/dashboard/AgendaHoje'
 import AlertasImportantes from '@/components/dashboard/AlertasImportantes'
+import MetricasPerformance from '@/components/dashboard/MetricasPerformance'
+import HorariosPico from '@/components/dashboard/HorariosPico'
 import useDashboardMetrics from '@/hooks/useDashboardMetrics'
 
 export default function DashboardPage() {
@@ -290,6 +292,16 @@ export default function DashboardPage() {
                 </Box>
               </CardContent>
             </Card>
+          </Grid>
+
+          {/* Nova Seção: Métricas de Performance */}
+          <Grid item xs={12}>
+            <MetricasPerformance metrics={metrics} />
+          </Grid>
+
+          {/* Análise de Horários de Pico */}
+          <Grid item xs={12}>
+            <HorariosPico metrics={metrics} />
           </Grid>
 
           {/* Agenda do dia */}
