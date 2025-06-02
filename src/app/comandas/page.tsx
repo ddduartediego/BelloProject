@@ -530,23 +530,25 @@ export default function ComandasPage() {
             </Grid>
 
             <Grid item xs={12} sm={6} md={3}>
-              <FiltroCaixa
-                caixas={caixas}
-                caixaSelecionado={caixaSelecionado}
-                onCaixaChange={(caixa) => {
-                  setCaixaSelecionado(caixa)
-                  // Resetar outros filtros conforme especificado
-                  setFiltroStatus('todos')
-                  setBusca('')
-                }}
-                loading={caixasLoading}
-                error={caixasError}
-                size="small"
-                label="Filtrar por Caixa"
-              />
+              <Box sx={{ height: '100%', display: 'flex', alignItems: 'stretch' }}>
+                <FiltroCaixa
+                  caixas={caixas}
+                  caixaSelecionado={caixaSelecionado}
+                  onCaixaChange={(caixa) => {
+                    setCaixaSelecionado(caixa)
+                    // Resetar outros filtros conforme especificado
+                    setFiltroStatus('todos')
+                    setBusca('')
+                  }}
+                  loading={caixasLoading}
+                  error={caixasError}
+                  size="small"
+                  label="Filtrar por Caixa"
+                />
+              </Box>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={4}>
+            <Grid item xs={12} sm={12} md={4}>
               <TextField
                 fullWidth
                 size="small"
@@ -559,7 +561,7 @@ export default function ComandasPage() {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6} md={2}>
+            <Grid item xs={12} sm={12} md={2}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -570,7 +572,10 @@ export default function ComandasPage() {
                   setCaixaSelecionado(caixaSelecionado)
                 }}
                 size="small"
-                sx={{ height: '100%' }}
+                sx={{ 
+                  height: '40px',
+                  minHeight: '40px'
+                }}
               >
                 Limpar
               </Button>

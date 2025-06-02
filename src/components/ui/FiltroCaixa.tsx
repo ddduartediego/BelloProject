@@ -45,14 +45,14 @@ export default function FiltroCaixa({
 
   if (error) {
     return (
-      <Alert severity="error" variant="outlined" sx={{ minWidth: 250 }}>
+      <Alert severity="error" variant="outlined" sx={{ width: '100%' }}>
         {error}
       </Alert>
     )
   }
 
   return (
-    <FormControl variant={variant} size={size} sx={{ minWidth: 250 }}>
+    <FormControl variant={variant} size={size} fullWidth>
       <InputLabel id="filtro-caixa-label">{label}</InputLabel>
       <Select
         labelId="filtro-caixa-label"
