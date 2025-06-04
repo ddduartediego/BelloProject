@@ -31,6 +31,8 @@ import AbaAlertas from '@/components/dashboard/AbaAlertas'
 import DashboardConfiguracoes from '@/components/dashboard/DashboardConfiguracoes'
 import NotificacaoSistema, { NotificacaoItem } from '@/components/dashboard/NotificacaoSistema'
 import DashboardFiltrosAvancados, { FiltrosGerais } from '@/components/dashboard/DashboardFiltrosAvancados'
+import FiltrosExecutivos from '@/components/dashboard/FiltrosExecutivos'
+import FiltrosAvancados from '@/components/dashboard/FiltrosAvancados'
 import { exportacaoRelatoriosService, ConfigExportacao } from '@/services/exportacaoRelatoriosService'
 import { formatDistanceToNow, format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -203,7 +205,12 @@ export default function DashboardModular({
     config,
     refreshTab,
     refreshAll,
-    updateConfig
+    updateConfig,
+    filtros,
+    updateFiltros,
+    filtrosExecutivos,
+    updateFiltrosExecutivos,
+    updateMetaDiaria
   } = useDashboardModular()
 
   // Hook de notificações
@@ -430,20 +437,44 @@ export default function DashboardModular({
     switch (activeTab) {
       case 'visao-geral':
         return (
-          <CardsExecutivos 
-            metrics={metrics.executivas}
-            loading={loading.executivas}
-            config={config}
-          />
+          <Box>
+            {/* Filtros Executivos para Visão Geral */}
+            <FiltrosExecutivos
+              periodo={filtrosExecutivos || { inicio: new Date().toISOString(), fim: new Date().toISOString() }}
+              metaDiaria={config.metas?.vendaDiaria}
+              config={config}
+              onPeriodoChange={updateFiltrosExecutivos || (() => {})}
+              onMetaChange={updateMetaDiaria || (() => {})}
+              onConfigChange={updateConfig}
+              loading={loading.executivas}
+            />
+            
+            {/* Cards Executivos */}
+            <CardsExecutivos 
+              metrics={metrics.executivas}
+              loading={loading.executivas}
+              config={config}
+            />
+          </Box>
         )
       
       case 'profissionais':
         return (
-          <AbaProfissionais 
-            metrics={metrics.profissionais}
-            loading={loading.profissionais}
-            config={config}
-          />
+          <Box>
+            {/* Filtros Avançados para Profissionais */}
+            <FiltrosAvancados
+              filtros={filtros || { inicio: new Date().toISOString(), fim: new Date().toISOString() }}
+              onFiltrosChange={updateFiltros || (() => {})}
+              loading={loading.profissionais}
+            />
+            
+            {/* Aba de Profissionais */}
+            <AbaProfissionais 
+              metrics={metrics.profissionais}
+              loading={loading.profissionais}
+              config={config}
+            />
+          </Box>
         )
       
       case 'comparativos':

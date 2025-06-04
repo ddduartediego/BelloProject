@@ -104,6 +104,15 @@ export default function AbaProfissionais({
     setTabValue(newValue)
   }
 
+  // Debug: verificar dados recebidos
+  console.log('🔍 AbaProfissionais - dados recebidos:', {
+    loading,
+    metricsExists: !!metrics,
+    analyticsReaisExists: !!metrics?.analyticsReais,
+    rankingLength: metrics?.analyticsReais?.ranking?.length || 0,
+    estatisticas: metrics?.estatisticas
+  })
+
   if (loading) {
     return (
       <Box 
@@ -119,6 +128,89 @@ export default function AbaProfissionais({
         <LinearProgress sx={{ width: '100%', maxWidth: 400 }} />
         <Typography variant="body1" color="text.secondary">
           Carregando métricas de profissionais...
+        </Typography>
+      </Box>
+    )
+  }
+
+  // Função para adaptar dados reais para o formato esperado
+  const adaptarDadosReais = () => {
+    if (metrics.analyticsReais?.ranking && metrics.analyticsReais.ranking.length > 0) {
+      return metrics.analyticsReais.ranking.map((prof, index) => ({
+        id: prof.id,
+        nome: prof.nome,
+        posicao: index + 1,
+        avatar: undefined, // Não disponível nos dados reais
+        status: 'ATIVO' as const,
+        metricas: {
+          vendas: {
+            hoje: prof.vendas.periodo, // Usar período como aproximação
+            semana: prof.vendas.periodo,
+            mes: prof.vendas.periodo * 4, // Estimativa
+            crescimentoSemanal: prof.vendas.crescimento,
+            crescimentoMensal: prof.vendas.crescimento * 2
+          },
+          comandas: {
+            hoje: prof.performance.comandas,
+            semana: prof.performance.comandas,
+            mes: prof.performance.comandas * 4,
+            ticketMedio: prof.vendas.ticketMedio,
+            crescimentoTicket: 0 // Não disponível
+          },
+          ocupacao: {
+            percentual: prof.performance.ocupacao,
+            horasAgendadas: prof.performance.ocupacao * 8 / 100, // Aproximação
+            horasDisponiveis: 8,
+            eficiencia: prof.performance.eficiencia
+          },
+          satisfacao: {
+            media: prof.performance.eficiencia / 20, // Converter 0-100 para 0-5
+            totalAvaliacoes: 10, // Estimativa
+            tendencia: prof.vendas.crescimento > 0 ? 'SUBINDO' as const : 
+                      prof.vendas.crescimento < 0 ? 'DESCENDO' as const : 'ESTAVEL' as const
+          }
+        },
+        comparativos: {
+          ontem: {
+            vendas: prof.vendas.periodo * 0.9, // Estimativa
+            comandas: prof.performance.comandas,
+            crescimentoVendas: prof.vendas.crescimento,
+            crescimentoComandas: 0
+          },
+          semanaPassada: {
+            vendas: prof.vendas.periodo * 0.8,
+            comandas: prof.performance.comandas,
+            crescimentoVendas: prof.vendas.crescimento,
+            crescimentoComandas: 0
+          }
+        }
+      }))
+    }
+    return metrics.ranking || []
+  }
+
+  // Usar dados adaptados
+  const rankingAtual = adaptarDadosReais()
+  const hasData = rankingAtual.length > 0
+
+  // Se não temos dados, mostrar mensagem apropriada
+  if (!hasData) {
+    return (
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: 300,
+          flexDirection: 'column',
+          gap: 2 
+        }}
+      >
+        <Typography variant="h6" color="text.secondary">
+          Nenhum dado de profissional encontrado
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Verifique os filtros aplicados ou tente um período diferente
         </Typography>
       </Box>
     )
@@ -143,16 +235,16 @@ export default function AbaProfissionais({
     return 'text.secondary'
   }
 
-  // Dados para gráficos
+  // Dados para gráficos usando dados adaptados
   const getVendasChartData = () => {
-    const nomes = metrics.ranking.map(p => p.nome)
-    const vendas = metrics.ranking.map(p => p.metricas.vendas.semana)
+    const nomes = rankingAtual.map(p => p.nome)
+    const vendas = rankingAtual.map(p => p.metricas.vendas.semana)
     
     return {
       labels: nomes,
       datasets: [
         {
-          label: 'Vendas da Semana',
+          label: 'Vendas do Período',
           data: vendas,
           backgroundColor: 'rgba(25, 118, 210, 0.6)',
           borderColor: 'rgba(25, 118, 210, 1)',
@@ -163,8 +255,8 @@ export default function AbaProfissionais({
   }
 
   const getOcupacaoChartData = () => {
-    const nomes = metrics.ranking.map(p => p.nome)
-    const ocupacao = metrics.ranking.map(p => p.metricas.ocupacao.percentual)
+    const nomes = rankingAtual.map(p => p.nome)
+    const ocupacao = rankingAtual.map(p => p.metricas.ocupacao.percentual)
     
     return {
       labels: nomes,
@@ -187,7 +279,7 @@ export default function AbaProfissionais({
   }
 
   const getRadarChartData = () => {
-    const topTres = metrics.ranking.slice(0, 3)
+    const topTres = rankingAtual.slice(0, 3)
     
     return {
       labels: ['Vendas', 'Comandas', 'Ocupação', 'Satisfação', 'Ticket Médio'],
@@ -214,7 +306,7 @@ export default function AbaProfissionais({
     const labels = ['Excelente (4.5-5.0)', 'Bom (3.5-4.4)', 'Regular (2.5-3.4)', 'Ruim (0-2.4)']
     const faixas = [0, 0, 0, 0]
     
-    metrics.ranking.forEach(prof => {
+    rankingAtual.forEach(prof => {
       const satisfacao = prof.metricas.satisfacao.media
       if (satisfacao >= 4.5) faixas[0]++
       else if (satisfacao >= 3.5) faixas[1]++
@@ -509,7 +601,7 @@ export default function AbaProfissionais({
         <TabPanel value={tabValue} index={0}>
           {/* Ranking de Profissionais */}
           <Grid container spacing={3}>
-            {metrics.ranking.map((profissional) => (
+            {rankingAtual.map((profissional) => (
               <Grid item xs={12} sm={6} md={4} key={profissional.id}>
                 <CardMetricaProfissional profissional={profissional} />
               </Grid>
@@ -533,7 +625,7 @@ export default function AbaProfissionais({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {metrics.ranking.map((prof) => (
+                {rankingAtual.map((prof) => (
                   <TableRow key={prof.id} hover>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -696,7 +788,7 @@ export default function AbaProfissionais({
                           🏆 Destaque da Semana
                         </Typography>
                         <Typography variant="body2" color="success.dark">
-                          {metrics.ranking[0]?.nome} lidera com {formatCurrency(metrics.ranking[0]?.metricas.vendas.semana || 0)} em vendas
+                          {rankingAtual[0]?.nome} lidera com {formatCurrency(rankingAtual[0]?.metricas.vendas.semana || 0)} em vendas
                         </Typography>
                       </Box>
                     </Grid>
@@ -706,7 +798,7 @@ export default function AbaProfissionais({
                           ⚠️ Atenção Necessária
                         </Typography>
                         <Typography variant="body2" color="warning.dark">
-                          {metrics.ranking.filter(p => p.metricas.ocupacao.percentual < 60).length} profissional(is) com ocupação baixa
+                          {rankingAtual.filter(p => p.metricas.ocupacao.percentual < 60).length} profissional(is) com ocupação baixa
                         </Typography>
                       </Box>
                     </Grid>
@@ -731,7 +823,7 @@ export default function AbaProfissionais({
                     <Grid item xs={12} md={6}>
                       <Typography variant="body2" paragraph>
                         <strong>Performance de Vendas:</strong> O ranking atual mostra uma distribuição equilibrada de performance. 
-                        O líder está {((metrics.ranking[0]?.metricas.vendas.semana || 0) / (metrics.ranking[1]?.metricas.vendas.semana || 1) * 100 - 100).toFixed(0)}% 
+                        O líder está {((rankingAtual[0]?.metricas.vendas.semana || 0) / (rankingAtual[1]?.metricas.vendas.semana || 1) * 100 - 100).toFixed(0)}% 
                         acima do segundo colocado.
                       </Typography>
                       <Typography variant="body2" paragraph>
@@ -742,7 +834,7 @@ export default function AbaProfissionais({
                     <Grid item xs={12} md={6}>
                       <Typography variant="body2" paragraph>
                         <strong>Satisfação do Cliente:</strong> A satisfação média da equipe está em {
-                          (metrics.ranking.reduce((acc, p) => acc + p.metricas.satisfacao.media, 0) / metrics.ranking.length).toFixed(1)
+                          (rankingAtual.reduce((acc, p) => acc + p.metricas.satisfacao.media, 0) / rankingAtual.length).toFixed(1)
                         } estrelas, indicando um bom nível de qualidade no atendimento.
                       </Typography>
                       <Typography variant="body2" paragraph>

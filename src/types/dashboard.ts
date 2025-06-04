@@ -71,6 +71,7 @@ export interface MetricasProfissionais {
     ocupacaoGeral: number
   }
   comparativas?: MetricasComparativasProfissionais
+  analyticsReais?: ProfissionaisAnalytics
 }
 
 // ============================================================================
@@ -211,6 +212,13 @@ export interface UseDashboardModularReturn {
   refreshTab: (tab: TabDashboard['id']) => Promise<void>
   refreshAll: () => Promise<void>
   updateConfig: (newConfig: Partial<DashboardConfig>) => void
+  filtros?: FiltroAvancado
+  updateFiltros?: (novosFiltros: Partial<FiltroAvancado>) => Promise<void>
+  filtrosExecutivos?: FiltroAvancado
+  updateFiltrosExecutivos?: (novosFiltros: Partial<FiltroAvancado>) => Promise<void>
+  updateMetaDiaria?: (meta: number) => Promise<void>
+  filtrosComparativos?: FiltroComparativo
+  updateFiltrosComparativos?: (novosFiltros: Partial<FiltroComparativo>) => Promise<void>
 }
 
 export interface DashboardContextValue {
@@ -477,5 +485,54 @@ export interface MetricasComparativasProfissionais {
     vendasVsOcupacao: number
     vendasVsSatisfacao: number
     ocupacaoVsSatisfacao: number
+  }
+}
+
+// ============================================================================
+// FILTROS AVANÇADOS
+// ============================================================================
+
+export interface FiltroAvancado {
+  inicio: string // ISO timestamp
+  fim: string // ISO timestamp
+  profissionalId?: string
+}
+
+export interface FiltroComparativo extends FiltroAvancado {
+  tipoComparacao: 'PERIODO_ANTERIOR' | 'SEMANA_PASSADA' | 'MES_PASSADO' | 'ANO_PASSADO' | 'PERSONALIZADO'
+  periodoComparacao?: {
+    inicio: string
+    fim: string
+  }
+  metricas: ('vendas' | 'comandas' | 'clientes' | 'profissionais')[]
+}
+
+// ============================================================================
+// ANALYTICS DE PROFISSIONAIS (VERSÃO REAL)
+// ============================================================================
+
+export interface ProfissionaisAnalytics {
+  estatisticas: {
+    totalProfissionais: number
+    mediaVendasDia: number
+    mediaTicket: number
+    ocupacaoGeral: number
+  }
+  ranking: ProfissionalRankingReal[]
+}
+
+// Versão simplificada do ranking para dados reais
+export interface ProfissionalRankingReal {
+  id: string
+  nome: string
+  vendas: {
+    periodo: number
+    crescimento: number
+    ticketMedio: number
+  }
+  performance: {
+    comandas: number
+    ocupacao: number
+    eficiencia: number
   }
 } 

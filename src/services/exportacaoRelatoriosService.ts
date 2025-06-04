@@ -246,7 +246,7 @@ export class ExportacaoRelatoriosService {
       crescimentoVendas: executivas.vendas.percentualVsOntem,
       profissionaisAtivos: executivas.profissionaisAtivos.totalAtivos,
       clientesAtendidos: executivas.clientes.totalAtivos,
-      melhorDia: executivas.semanaAtual.melhorDia,
+      melhorDia: 'N/A',
       horarioPico: '14h-16h' // Simulado - em produção viria dos dados
     }
   }

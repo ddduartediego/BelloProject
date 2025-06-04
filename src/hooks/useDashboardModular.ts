@@ -7,11 +7,17 @@ import {
   MetricasExecutivas,
   MetricasProfissionais,
   MetricasComparativos,
-  AlertasInteligentes
+  AlertasInteligentes,
+  FiltroAvancado,
+  FiltroComparativo
 } from '@/types/dashboard'
 import dashboardExecutivoService from '@/services/dashboardExecutivoService'
 import alertasInteligentesService from '@/services/alertasInteligentesService'
-import profissionaisAnalyticsService from '@/services/profissionaisAnalyticsService'
+import { profissionaisAnalyticsRealService } from '@/services/profissionaisAnalyticsRealService'
+import { estatisticasPrincipaisService } from '@/services/estatisticasPrincipaisService'
+import { analisesTemporaisService } from '@/services/analisesTemporaisService'
+import { ComparativosDataAdapter } from '@/services/comparativosDataAdapter'
+import { comandasService } from '@/services'
 import useDashboardCache from './useDashboardCache'
 
 // ============================================================================
@@ -38,6 +44,42 @@ const DEFAULT_CONFIG: DashboardConfig = {
   }
 }
 
+// Filtros padrão para profissionais (últimos 7 dias)
+const getDefaultFiltersProfissionais = (): FiltroAvancado => {
+  const fim = new Date()
+  const inicio = new Date()
+  inicio.setDate(inicio.getDate() - 7)
+  
+  return {
+    inicio: inicio.toISOString(),
+    fim: fim.toISOString()
+  }
+}
+
+// Filtros padrão para executivos (hoje)
+const getDefaultFiltersExecutivos = (): FiltroAvancado => {
+  const hoje = new Date()
+  const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+  
+  return {
+    inicio: inicio.toISOString(),
+    fim: hoje.toISOString()
+  }
+}
+
+// Filtros padrão para comparativos (hoje vs ontem)
+const getDefaultFiltersComparativos = (): FiltroComparativo => {
+  const hoje = new Date()
+  const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+  
+  return {
+    inicio: inicio.toISOString(),
+    fim: hoje.toISOString(),
+    tipoComparacao: 'PERIODO_ANTERIOR',
+    metricas: ['vendas', 'comandas']
+  }
+}
+
 // ============================================================================
 // HOOK PRINCIPAL
 // ============================================================================
@@ -54,6 +96,11 @@ export function useDashboardModular(): UseDashboardModularReturn {
   })
   const [error, setError] = useState<string | null>(null)
   const [config, setConfig] = useState<DashboardConfig>(DEFAULT_CONFIG)
+  
+  // Estados de filtros separados
+  const [filtrosProfissionais, setFiltrosProfissionais] = useState<FiltroAvancado>(getDefaultFiltersProfissionais())
+  const [filtrosExecutivos, setFiltrosExecutivos] = useState<FiltroAvancado>(getDefaultFiltersExecutivos())
+  const [filtrosComparativos, setFiltrosComparativos] = useState<FiltroComparativo>(getDefaultFiltersComparativos())
 
   // Cache com configurações específicas por aba
   const cache = useDashboardCache({
@@ -66,32 +113,49 @@ export function useDashboardModular(): UseDashboardModularReturn {
   // ============================================================================
 
   /**
-   * Carrega métricas executivas usando serviço especializado
+   * Carrega métricas executivas usando novo serviço especializado
    */
   const loadMetricasExecutivas = useCallback(async (): Promise<MetricasExecutivas> => {
-    return await dashboardExecutivoService.carregarMetricasExecutivas(config.metas.vendaDiaria)
-  }, [config.metas.vendaDiaria])
+    try {
+      const filtroEstatisticas = {
+        periodo: filtrosExecutivos,
+        metaDiaria: config.metas.vendaDiaria
+      }
+
+      return await estatisticasPrincipaisService.calcularMetricasExecutivas(filtroEstatisticas)
+    } catch (error) {
+      console.error('Erro ao carregar métricas executivas:', error)
+      // Fallback para serviço anterior
+      return await dashboardExecutivoService.carregarMetricasExecutivas(config.metas.vendaDiaria)
+    }
+  }, [filtrosExecutivos, config.metas.vendaDiaria])
 
   /**
-   * Carrega métricas de profissionais
+   * Carrega métricas de profissionais com dados reais
    */
   const loadMetricasProfissionais = useCallback(async (): Promise<MetricasProfissionais> => {
     try {
-      const [ranking, estatisticas] = await Promise.all([
-        profissionaisAnalyticsService.carregarRankingProfissionais(),
-        // Manter estatísticas simples por enquanto
-        Promise.resolve({
-          totalProfissionais: 8,
-          mediaVendasDia: 650,
-          mediaTicket: 92,
-          ocupacaoGeral: 78
-        })
-      ])
+      console.log('🔄 Carregando métricas de profissionais...', {
+        filtros: filtrosProfissionais,
+        inicio: new Date(filtrosProfissionais.inicio).toLocaleDateString(),
+        fim: new Date(filtrosProfissionais.fim).toLocaleDateString()
+      })
+
+      // Usar serviço real com filtros de profissionais
+      const analyticsReais = await profissionaisAnalyticsRealService.calcularAnalyticsCompleto(filtrosProfissionais)
+
+      console.log('✅ Analytics reais carregados:', {
+        totalProfissionais: analyticsReais.estatisticas.totalProfissionais,
+        rankingLength: analyticsReais.ranking.length,
+        primeiroProfissional: analyticsReais.ranking[0]?.nome
+      })
 
       return {
-        ranking,
+        ranking: [], // Manter compatibilidade com tipo original
         individual: {}, // Será preenchido conforme necessário
-        estatisticas
+        estatisticas: analyticsReais.estatisticas,
+        // Adicionar dados reais em propriedade customizada
+        analyticsReais
       }
     } catch (error) {
       console.error('Erro ao carregar métricas de profissionais:', error)
@@ -107,107 +171,113 @@ export function useDashboardModular(): UseDashboardModularReturn {
         }
       }
     }
-  }, [])
+  }, [filtrosProfissionais])
 
   /**
-   * Carrega métricas comparativas
+   * Carrega métricas comparativas com dados reais do analisesTemporaisService
    */
   const loadMetricasComparativos = useCallback(async (): Promise<MetricasComparativos> => {
-    // TODO: Implementar métricas comparativas
-    return {
-      periodos: {
-        ultimaSemana: {
-          inicio: '',
-          fim: '',
-          vendas: 0,
-          comandas: 0,
-          ticketMedio: 0,
-          clientesUnicos: 0
-        },
-        ultimoMes: {
-          inicio: '',
-          fim: '',
-          vendas: 0,
-          comandas: 0,
-          ticketMedio: 0,
-          clientesUnicos: 0
-        },
-        semanaVsSemanaPassada: {
-          atual: {
-            inicio: '',
-            fim: '',
-            vendas: 0,
-            comandas: 0,
-            ticketMedio: 0,
-            clientesUnicos: 0
-          },
-          anterior: {
-            inicio: '',
-            fim: '',
-            vendas: 0,
-            comandas: 0,
-            ticketMedio: 0,
-            clientesUnicos: 0
-          },
-          crescimento: {
-            vendas: 0,
-            comandas: 0,
-            ticketMedio: 0,
-            clientes: 0
-          },
-          crescimentoPercentual: {
-            vendas: 0,
-            comandas: 0,
-            ticketMedio: 0,
-            clientes: 0
-          }
-        },
-        mesVsMesPassado: {
-          atual: {
-            inicio: '',
-            fim: '',
-            vendas: 0,
-            comandas: 0,
-            ticketMedio: 0,
-            clientesUnicos: 0
-          },
-          anterior: {
-            inicio: '',
-            fim: '',
-            vendas: 0,
-            comandas: 0,
-            ticketMedio: 0,
-            clientesUnicos: 0
-          },
-          crescimento: {
-            vendas: 0,
-            comandas: 0,
-            ticketMedio: 0,
-            clientes: 0
-          },
-          crescimentoPercentual: {
-            vendas: 0,
-            comandas: 0,
-            ticketMedio: 0,
-            clientes: 0
-          }
-        }
-      },
-      clientes: {
-        novos: { quantidade: 0, percentual: 0, comparativo: 0 },
-        retorno: { taxa: 0, comparativo: 0 },
-        vips: { quantidade: 0, ticketMedio: 0, comparativo: 0 }
-      },
-      servicos: {
-        topPorQuantidade: [],
-        topPorValor: []
-      },
-      profissionais: {
-        topVendas: [],
-        topServicos: []
+    try {
+      // Usar período dos filtros comparativos específicos
+      const dataInicio = new Date(filtrosComparativos.inicio)
+      const dataFim = new Date(filtrosComparativos.fim)
+      
+      // Gerar chave para cache específico incluindo tipo de comparação e métricas
+      const cacheKey = `comparativos-${filtrosComparativos.inicio}-${filtrosComparativos.fim}-${filtrosComparativos.tipoComparacao}-${filtrosComparativos.metricas.join(',')}`
+      
+      // Verificar cache primeiro
+      const cached = cache.get(cacheKey)
+      if (cached) {
+        console.log('📦 Comparativos carregados do cache')
+        return cached as MetricasComparativos
       }
+
+      console.log('🔄 Carregando métricas comparativas com dados reais...', {
+        periodo: `${dataInicio.toLocaleDateString()} - ${dataFim.toLocaleDateString()}`,
+        tipoComparacao: filtrosComparativos.tipoComparacao,
+        metricas: filtrosComparativos.metricas
+      })
+
+      // Carregar dados em paralelo usando analisesTemporaisService
+      const [
+        comparativoSemana,
+        comparativoMes,
+        rankingServicos,
+        analyticsClientes,
+        estatisticasProfissionais
+      ] = await Promise.allSettled([
+        // Comparativo baseado no tipo selecionado
+        analisesTemporaisService.criarComparativoTemporal(dataInicio, dataFim, filtrosComparativos.tipoComparacao === 'PERIODO_ANTERIOR' ? 'PERIODO_ANTERIOR' : 'PERIODO_ANTERIOR'),
+        // Comparativo do mês atual vs mês anterior  
+        analisesTemporaisService.criarComparativoTemporal(
+          new Date(dataFim.getTime() - 30 * 24 * 60 * 60 * 1000), // 30 dias atrás
+          dataFim,
+          'PERIODO_ANTERIOR'
+        ),
+        // Ranking de serviços do período (apenas se métricas incluem serviços)
+        filtrosComparativos.metricas.includes('vendas') || filtrosComparativos.metricas.includes('comandas') ?
+          analisesTemporaisService.gerarRankingServicos({
+            inicio: dataInicio,
+            fim: dataFim,
+            descricao: 'Período atual',
+            totalDias: Math.ceil((dataFim.getTime() - dataInicio.getTime()) / (1000 * 60 * 60 * 24))
+          }) : Promise.resolve(null),
+        // Analytics de clientes do período (apenas se métricas incluem clientes)
+        filtrosComparativos.metricas.includes('clientes') ?
+          analisesTemporaisService.gerarAnalyticsClientes({
+            inicio: dataInicio,
+            fim: dataFim,
+            descricao: 'Período atual',
+            totalDias: Math.ceil((dataFim.getTime() - dataInicio.getTime()) / (1000 * 60 * 60 * 24))
+          }) : Promise.resolve(null),
+        // Estatísticas de profissionais (apenas se métricas incluem profissionais)
+        filtrosComparativos.metricas.includes('profissionais') ?
+          comandasService.getEstatisticasAvancadas({
+            inicio: filtrosComparativos.inicio,
+            fim: filtrosComparativos.fim
+          }) : Promise.resolve(null)
+      ])
+
+      // Extrair dados das promises settled
+      const comparativoSemanaData = comparativoSemana.status === 'fulfilled' ? comparativoSemana.value : null
+      const comparativoMesData = comparativoMes.status === 'fulfilled' ? comparativoMes.value : null
+      const rankingServicosData = rankingServicos.status === 'fulfilled' ? rankingServicos.value : null
+      const analyticsClientesData = analyticsClientes.status === 'fulfilled' ? analyticsClientes.value : null
+      const estatisticasProfissionaisData = estatisticasProfissionais.status === 'fulfilled' ? 
+        estatisticasProfissionais.value?.data : null
+
+      // Usar o adaptador para converter dados para formato MetricasComparativos
+      const metricasComparativos = ComparativosDataAdapter.adaptarAnaliseCompleta(
+        {
+          semanaAtual: comparativoSemanaData || undefined,
+          mesAtual: comparativoMesData || undefined
+        },
+        rankingServicosData || undefined,
+        analyticsClientesData || undefined,
+        estatisticasProfissionaisData || undefined
+      )
+
+      console.log('✅ Métricas comparativas carregadas com sucesso', {
+        temComparativoSemana: !!comparativoSemanaData,
+        temComparativoMes: !!comparativoMesData,
+        temRankingServicos: !!rankingServicosData,
+        temAnalyticsClientes: !!analyticsClientesData,
+        totalServicos: metricasComparativos.servicos.topPorQuantidade.length,
+        metricasSelecionadas: filtrosComparativos.metricas
+      })
+
+      // Salvar no cache por 5 minutos
+      cache.set(cacheKey, metricasComparativos, 5 * 60 * 1000, ['comparativos'])
+
+      return metricasComparativos
+
+    } catch (error) {
+      console.error('Erro ao carregar métricas comparativas:', error)
+      
+      // Fallback: retornar dados básicos em caso de erro
+      return ComparativosDataAdapter.gerarMetricasVazias()
     }
-  }, [])
+  }, [filtrosComparativos, cache, analisesTemporaisService])
 
   /**
    * Carrega alertas inteligentes usando serviço especializado
@@ -215,6 +285,74 @@ export function useDashboardModular(): UseDashboardModularReturn {
   const loadAlertasInteligentes = useCallback(async (): Promise<AlertasInteligentes> => {
     return await alertasInteligentesService.carregarAlertas(config)
   }, [config])
+
+  // ============================================================================
+  // FUNÇÕES DE FILTROS
+  // ============================================================================
+
+  /**
+   * Atualiza filtros de profissionais e recarrega métricas
+   */
+  const updateFiltrosProfissionais = useCallback(async (novosFiltros: Partial<FiltroAvancado>) => {
+    const filtrosAtualizados = { ...filtrosProfissionais, ...novosFiltros }
+    setFiltrosProfissionais(filtrosAtualizados)
+    
+    // Limpar cache de profissionais
+    cache.invalidateByTag('profissionais', true)
+    
+    // Recarregar aba de profissionais automaticamente
+    refreshTab('profissionais')
+  }, [filtrosProfissionais, cache])
+
+  /**
+   * Atualiza filtros executivos e recarrega métricas
+   */
+  const updateFiltrosExecutivos = useCallback(async (novosFiltros: Partial<FiltroAvancado>) => {
+    const filtrosAtualizados = { ...filtrosExecutivos, ...novosFiltros }
+    setFiltrosExecutivos(filtrosAtualizados)
+    
+    // Limpar cache executivos e comparativos (que dependem dos filtros executivos)
+    cache.invalidateByTag('visao-geral', true)
+    cache.invalidateByTag('comparativos', true)
+    
+    // Recarregar abas que dependem dos filtros executivos
+    refreshTab('visao-geral')
+    refreshTab('comparativos')
+  }, [filtrosExecutivos, cache])
+
+  /**
+   * Atualiza filtros comparativos e recarrega métricas
+   */
+  const updateFiltrosComparativos = useCallback(async (novosFiltros: Partial<FiltroComparativo>) => {
+    const filtrosAtualizados = { ...filtrosComparativos, ...novosFiltros }
+    setFiltrosComparativos(filtrosAtualizados)
+    
+    // Limpar cache de comparativos
+    cache.invalidateByTag('comparativos', true)
+    
+    // Recarregar aba de comparativos automaticamente
+    refreshTab('comparativos')
+  }, [filtrosComparativos, cache])
+
+  /**
+   * Atualiza meta diária e recarrega métricas executivas
+   */
+  const updateMetaDiaria = useCallback(async (meta: number) => {
+    const novaConfig = {
+      ...config,
+      metas: {
+        ...config.metas,
+        vendaDiaria: meta
+      }
+    }
+    setConfig(novaConfig)
+    
+    // Limpar cache executivos
+    cache.invalidateByTag('visao-geral', true)
+    
+    // Recarregar aba de visão geral automaticamente
+    refreshTab('visao-geral')
+  }, [config, cache])
 
   // ============================================================================
   // FUNÇÕES DE REFRESH
@@ -356,6 +494,29 @@ export function useDashboardModular(): UseDashboardModularReturn {
       console.warn('Erro ao carregar configuração:', error)
     }
 
+    // Carregar filtros salvos
+    try {
+      const savedFiltersProfissionais = localStorage.getItem('dashboard_filters_profissionais')
+      if (savedFiltersProfissionais) {
+        const parsed = JSON.parse(savedFiltersProfissionais)
+        setFiltrosProfissionais(prev => ({ ...prev, ...parsed }))
+      }
+
+      const savedFiltersExecutivos = localStorage.getItem('dashboard_filters_executivos')
+      if (savedFiltersExecutivos) {
+        const parsed = JSON.parse(savedFiltersExecutivos)
+        setFiltrosExecutivos(prev => ({ ...prev, ...parsed }))
+      }
+
+      const savedFiltersComparativos = localStorage.getItem('dashboard_filters_comparativos')
+      if (savedFiltersComparativos) {
+        const parsed = JSON.parse(savedFiltersComparativos)
+        setFiltrosComparativos(prev => ({ ...prev, ...parsed }))
+      }
+    } catch (error) {
+      console.warn('Erro ao carregar filtros:', error)
+    }
+
     // Carregar métricas iniciais
     refreshAll()
   }, [])
@@ -373,6 +534,33 @@ export function useDashboardModular(): UseDashboardModularReturn {
     return () => clearInterval(interval)
   }, [config.autoRefresh.enabled, config.autoRefresh.interval, refreshAll])
 
+  /**
+   * Salvar filtros no localStorage quando mudarem
+   */
+  useEffect(() => {
+    try {
+      localStorage.setItem('dashboard_filters_profissionais', JSON.stringify(filtrosProfissionais))
+    } catch (error) {
+      console.warn('Erro ao salvar filtros de profissionais:', error)
+    }
+  }, [filtrosProfissionais])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dashboard_filters_executivos', JSON.stringify(filtrosExecutivos))
+    } catch (error) {
+      console.warn('Erro ao salvar filtros executivos:', error)
+    }
+  }, [filtrosExecutivos])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dashboard_filters_comparativos', JSON.stringify(filtrosComparativos))
+    } catch (error) {
+      console.warn('Erro ao salvar filtros comparativos:', error)
+    }
+  }, [filtrosComparativos])
+
   // ============================================================================
   // RETURN
   // ============================================================================
@@ -384,7 +572,17 @@ export function useDashboardModular(): UseDashboardModularReturn {
     config,
     refreshTab,
     refreshAll,
-    updateConfig
+    updateConfig,
+    // Filtros separados por contexto
+    filtros: filtrosProfissionais, // Manter compatibilidade
+    updateFiltros: updateFiltrosProfissionais, // Manter compatibilidade
+    // Novos filtros executivos
+    filtrosExecutivos,
+    updateFiltrosExecutivos,
+    updateMetaDiaria,
+    // Novos filtros comparativos
+    filtrosComparativos,
+    updateFiltrosComparativos
   }
 }
 
