@@ -20,11 +20,41 @@ export class DashboardExecutivoService {
       const caixaAtivo = await caixaService.getCaixaAtivo()
       const hoje = new Date()
       
+      if (!caixaAtivo.data) {
+        // Retornar dados padrão se não há caixa ativo
+        return {
+          status: 'FECHADO' as 'ABERTO' | 'FECHADO',
+          saldoAtual: 0,
+          tempoAberto: 0,
+          comparativoOntem: 0,
+          ultimaMovimentacao: hoje.toISOString()
+        }
+      }
+
+      // Buscar o caixa com movimentações para calcular saldo atual
+      const caixaComMovimentacoes = await caixaService.getById(caixaAtivo.data.id)
+      
+      let saldoAtual = caixaAtivo.data.saldo_inicial
+
+      if (caixaComMovimentacoes.data?.movimentacoes) {
+        // Calcular saldo atual usando a mesma lógica da página do caixa
+        const totalEntradas = caixaComMovimentacoes.data.movimentacoes
+          .filter(mov => mov.tipo_movimentacao === 'ENTRADA' || mov.tipo_movimentacao === 'REFORCO')
+          .reduce((total, mov) => total + mov.valor, 0)
+
+        const totalSaidas = caixaComMovimentacoes.data.movimentacoes
+          .filter(mov => mov.tipo_movimentacao === 'SAIDA' || mov.tipo_movimentacao === 'SANGRIA')
+          .reduce((total, mov) => total + Math.abs(mov.valor), 0)
+
+        saldoAtual = caixaAtivo.data.saldo_inicial + totalEntradas - totalSaidas
+      }
+      
       // Buscar movimentações do caixa de hoje e ontem para comparativo
       const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
       const ontem = new Date(hoje)
       ontem.setDate(ontem.getDate() - 1)
       const inicioOntem = new Date(ontem.getFullYear(), ontem.getMonth(), ontem.getDate())
+      const fimOntem = new Date(ontem.getFullYear(), ontem.getMonth(), ontem.getDate(), 23, 59, 59)
       
       // Calcular comparativo baseado em vendas do dia
       const [vendasHoje, vendasOntem] = await Promise.all([
@@ -46,13 +76,13 @@ export class DashboardExecutivoService {
         : 0
 
       return {
-        status: (caixaAtivo.data?.status || 'FECHADO') as 'ABERTO' | 'FECHADO',
-        saldoAtual: caixaAtivo.data?.saldo_inicial || 0,
-        tempoAberto: caixaAtivo.data?.data_abertura 
+        status: caixaAtivo.data.status as 'ABERTO' | 'FECHADO',
+        saldoAtual: saldoAtual,
+        tempoAberto: caixaAtivo.data.data_abertura 
           ? Math.floor((hoje.getTime() - new Date(caixaAtivo.data.data_abertura).getTime()) / (1000 * 60))
           : 0,
         comparativoOntem: Math.round(comparativoOntem),
-        ultimaMovimentacao: caixaAtivo.data?.atualizado_em || hoje.toISOString()
+        ultimaMovimentacao: caixaAtivo.data.atualizado_em || hoje.toISOString()
       }
     } catch (error) {
       console.error('Erro ao calcular métricas do caixa:', error)
@@ -172,27 +202,32 @@ export class DashboardExecutivoService {
   async calcularMetricasProfissionais() {
     try {
       const hoje = new Date()
-      const inicioSemana = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+      const fimHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59)
 
-      const [estatisticasProfissionais, vendasSemana] = await Promise.all([
+      const [estatisticasProfissionais, vendasHoje] = await Promise.all([
         profissionaisService.getEstatisticas(),
         comandasService.getEstatisticasAvancadas({
-          inicio: inicioSemana.toISOString(),
-          fim: hoje.toISOString()
+          inicio: inicioHoje.toISOString(),
+          fim: fimHoje.toISOString()
         })
       ])
 
       const totalAtivos = estatisticasProfissionais.data?.total || 0
-      const vendas = vendasSemana.data?.porProfissional || []
+      const vendas = vendasHoje.data?.porProfissional || []
       
-      // Encontrar top profissional
+      // Encontrar top profissional do dia
       const topProfissional = vendas.length > 0 ? vendas[0] : {
         profissional: 'N/A',
-        vendas: 0
+        vendas: 0,
+        comandas: 0
       }
 
-      // Calcular ocupação média (placeholder por enquanto)
-      const ocupacaoMedia = 75 // TODO: Implementar cálculo real baseado em horários
+      // Calcular ocupação média do dia (baseada na quantidade de comandas vs profissionais ativos)
+      // Assumindo uma média de 6-8 comandas por profissional como ocupação ideal
+      const totalComandas = vendas.reduce((acc, prof) => acc + prof.comandas, 0)
+      const comandasMediaPorProfissional = totalAtivos > 0 ? totalComandas / totalAtivos : 0
+      const ocupacaoMedia = Math.min(Math.round((comandasMediaPorProfissional / 6) * 100), 100)
 
       return {
         totalAtivos,
@@ -237,15 +272,9 @@ export class DashboardExecutivoService {
         ? ((vendasSemanaAtual - vendasSemanaPassada) / vendasSemanaPassada) * 100 
         : 0
 
-      // TODO: Implementar análise real de melhor/pior dia
-      const melhorDia = 'Sexta-feira'
-      const piorDia = 'Segunda-feira'
-
       return {
         vendas: vendasSemanaAtual,
-        percentualVsSemanaPassada: Math.round(percentualVsSemanaPassada),
-        melhorDia,
-        piorDia
+        percentualVsSemanaPassada: Math.round(percentualVsSemanaPassada)
       }
     } catch (error) {
       console.error('Erro ao calcular métricas da semana:', error)

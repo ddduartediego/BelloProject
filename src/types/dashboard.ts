@@ -48,8 +48,6 @@ export interface MetricasExecutivas {
   semanaAtual: {
     vendas: number
     percentualVsSemanaPassada: number
-    melhorDia: string
-    piorDia: string
   }
   clientes: {
     novosHoje: number

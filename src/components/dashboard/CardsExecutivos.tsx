@@ -329,7 +329,7 @@ const CardsExecutivos = memo(function CardsExecutivos({
         subtitle: (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              Top profissional:
+              Top do dia:
             </Typography>
             <Typography variant="body2" fontWeight="medium" noWrap>
               {metrics.profissionaisAtivos.topProfissional.nome}
@@ -339,7 +339,7 @@ const CardsExecutivos = memo(function CardsExecutivos({
         info: (
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="caption" color="text.secondary">
-              Vendas: {formatCurrency(metrics.profissionaisAtivos.topProfissional.vendas)}
+              Vendas hoje: {formatCurrency(metrics.profissionaisAtivos.topProfissional.vendas)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               Ocupação: {metrics.profissionaisAtivos.ocupacaoMedia}%
@@ -358,17 +358,7 @@ const CardsExecutivos = memo(function CardsExecutivos({
           value: metrics.semanaAtual.percentualVsSemanaPassada,
           label: 'vs semana passada',
           type: getTrendType(metrics.semanaAtual.percentualVsSemanaPassada)
-        },
-        info: (
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="caption" color="success.main">
-              Melhor: {metrics.semanaAtual.melhorDia}
-            </Typography>
-            <Typography variant="caption" color="error.main">
-              Pior: {metrics.semanaAtual.piorDia}
-            </Typography>
-          </Box>
-        )
+        }
       },
 
       // Card de Clientes
