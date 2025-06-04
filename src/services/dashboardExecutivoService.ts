@@ -1,0 +1,325 @@
+import { 
+  comandasService, 
+  caixaService, 
+  clientesService, 
+  profissionaisService 
+} from '@/services'
+import { MetricasExecutivas } from '@/types/dashboard'
+
+// ============================================================================
+// SERVIÇO ESPECIALIZADO PARA MÉTRICAS EXECUTIVAS
+// ============================================================================
+
+export class DashboardExecutivoService {
+  
+  /**
+   * Calcula métricas do caixa com comparativos
+   */
+  async calcularMetricasCaixa() {
+    try {
+      const caixaAtivo = await caixaService.getCaixaAtivo()
+      const hoje = new Date()
+      
+      // Buscar movimentações do caixa de hoje e ontem para comparativo
+      const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+      const ontem = new Date(hoje)
+      ontem.setDate(ontem.getDate() - 1)
+      const inicioOntem = new Date(ontem.getFullYear(), ontem.getMonth(), ontem.getDate())
+      
+      // Calcular comparativo baseado em vendas do dia
+      const [vendasHoje, vendasOntem] = await Promise.all([
+        comandasService.getEstatisticas({
+          inicio: inicioHoje.toISOString(),
+          fim: hoje.toISOString()
+        }),
+        comandasService.getEstatisticas({
+          inicio: inicioOntem.toISOString(),
+          fim: inicioHoje.toISOString()
+        })
+      ])
+
+      const vendaHojeTotal = vendasHoje.data?.faturamentoTotal || 0
+      const vendaOntemTotal = vendasOntem.data?.faturamentoTotal || 0
+      
+      const comparativoOntem = vendaOntemTotal > 0 
+        ? ((vendaHojeTotal - vendaOntemTotal) / vendaOntemTotal) * 100 
+        : 0
+
+      return {
+        status: (caixaAtivo.data?.status || 'FECHADO') as 'ABERTO' | 'FECHADO',
+        saldoAtual: caixaAtivo.data?.saldo_inicial || 0,
+        tempoAberto: caixaAtivo.data?.data_abertura 
+          ? Math.floor((hoje.getTime() - new Date(caixaAtivo.data.data_abertura).getTime()) / (1000 * 60))
+          : 0,
+        comparativoOntem: Math.round(comparativoOntem),
+        ultimaMovimentacao: caixaAtivo.data?.atualizado_em || hoje.toISOString()
+      }
+    } catch (error) {
+      console.error('Erro ao calcular métricas do caixa:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Calcula métricas de vendas com comparativos detalhados
+   */
+  async calcularMetricasVendas(metaDiaria?: number) {
+    try {
+      const hoje = new Date()
+      const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+      const fimHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59)
+      
+      const ontem = new Date(hoje)
+      ontem.setDate(ontem.getDate() - 1)
+      const inicioOntem = new Date(ontem.getFullYear(), ontem.getMonth(), ontem.getDate())
+      const fimOntem = new Date(ontem.getFullYear(), ontem.getMonth(), ontem.getDate(), 23, 59, 59)
+
+      // Buscar vendas com mais detalhamento
+      const [estatisticasHoje, estatisticasOntem, comandasRecentes] = await Promise.all([
+        comandasService.getEstatisticas({
+          inicio: inicioHoje.toISOString(),
+          fim: fimHoje.toISOString()
+        }),
+        comandasService.getEstatisticas({
+          inicio: inicioOntem.toISOString(),
+          fim: fimOntem.toISOString()
+        }),
+        // Buscar comandas recentes para última venda
+        comandasService.getAll({ page: 1, limit: 1 })
+      ])
+
+      const vendaHojeTotal = estatisticasHoje.data?.faturamentoTotal || 0
+      const vendaOntemTotal = estatisticasOntem.data?.faturamentoTotal || 0
+      
+      const percentualVsOntem = vendaOntemTotal > 0 
+        ? ((vendaHojeTotal - vendaOntemTotal) / vendaOntemTotal) * 100 
+        : 0
+
+      const percentualMeta = metaDiaria ? (vendaHojeTotal / metaDiaria) * 100 : 0
+
+      // Usar timestamp da última comanda ou agora
+      const ultimaVenda = comandasRecentes.data?.data?.[0]?.criado_em || hoje.toISOString()
+
+      return {
+        totalDia: vendaHojeTotal,
+        percentualVsOntem: Math.round(percentualVsOntem),
+        percentualMeta: Math.round(percentualMeta),
+        ultimaVenda,
+        metaDiaria
+      }
+    } catch (error) {
+      console.error('Erro ao calcular métricas de vendas:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Calcula métricas de comandas com análise detalhada
+   */
+  async calcularMetricasComandas() {
+    try {
+      const hoje = new Date()
+      const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+      const fimHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59)
+      
+      const ontem = new Date(hoje)
+      ontem.setDate(ontem.getDate() - 1)
+      const inicioOntem = new Date(ontem.getFullYear(), ontem.getMonth(), ontem.getDate())
+      const fimOntem = new Date(ontem.getFullYear(), ontem.getMonth(), ontem.getDate(), 23, 59, 59)
+
+      // Buscar comandas detalhadas
+      const [comandasHoje, comandasOntem, estatisticasHoje, comandasRecentes] = await Promise.all([
+        comandasService.getAll({}, {
+          data_inicio: inicioHoje.toISOString(),
+          data_fim: fimHoje.toISOString()
+        }),
+        comandasService.getAll({}, {
+          data_inicio: inicioOntem.toISOString(),
+          data_fim: fimOntem.toISOString()
+        }),
+        comandasService.getEstatisticas({
+          inicio: inicioHoje.toISOString(),
+          fim: fimHoje.toISOString()
+        }),
+        comandasService.getAll({ page: 1, limit: 1 })
+      ])
+
+      const quantidadeHoje = comandasHoje.data?.data?.length || 0
+      const quantidadeOntem = comandasOntem.data?.data?.length || 0
+      const faturamentoHoje = estatisticasHoje.data?.faturamentoTotal || 0
+      
+      const ticketMedio = quantidadeHoje > 0 ? faturamentoHoje / quantidadeHoje : 0
+      const comparativoOntem = quantidadeHoje - quantidadeOntem
+      
+      // Usar timestamp da última comanda
+      const ultimaComandaTimestamp = comandasRecentes.data?.data?.[0]?.criado_em || hoje.toISOString()
+
+      return {
+        quantidadeHoje,
+        ticketMedio,
+        comparativoOntem,
+        ultimaComanda: ultimaComandaTimestamp
+      }
+    } catch (error) {
+      console.error('Erro ao calcular métricas de comandas:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Calcula métricas de profissionais com ranking
+   */
+  async calcularMetricasProfissionais() {
+    try {
+      const hoje = new Date()
+      const inicioSemana = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+      const [estatisticasProfissionais, vendasSemana] = await Promise.all([
+        profissionaisService.getEstatisticas(),
+        comandasService.getEstatisticasAvancadas({
+          inicio: inicioSemana.toISOString(),
+          fim: hoje.toISOString()
+        })
+      ])
+
+      const totalAtivos = estatisticasProfissionais.data?.total || 0
+      const vendas = vendasSemana.data?.porProfissional || []
+      
+      // Encontrar top profissional
+      const topProfissional = vendas.length > 0 ? vendas[0] : {
+        profissional: 'N/A',
+        vendas: 0
+      }
+
+      // Calcular ocupação média (placeholder por enquanto)
+      const ocupacaoMedia = 75 // TODO: Implementar cálculo real baseado em horários
+
+      return {
+        totalAtivos,
+        topProfissional: {
+          nome: topProfissional.profissional,
+          vendas: topProfissional.vendas
+        },
+        ocupacaoMedia,
+        avaliacaoMedia: 4.5 // TODO: Implementar sistema de avaliações
+      }
+    } catch (error) {
+      console.error('Erro ao calcular métricas de profissionais:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Calcula métricas da semana com análise temporal
+   */
+  async calcularMetricasSemana() {
+    try {
+      const hoje = new Date()
+      const inicioSemanaAtual = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const inicioSemanaPassada = new Date(hoje.getTime() - 14 * 24 * 60 * 60 * 1000)
+      const fimSemanaPassada = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+      const [semanaAtual, semanaPassada] = await Promise.all([
+        comandasService.getEstatisticas({
+          inicio: inicioSemanaAtual.toISOString(),
+          fim: hoje.toISOString()  
+        }),
+        comandasService.getEstatisticas({
+          inicio: inicioSemanaPassada.toISOString(),
+          fim: fimSemanaPassada.toISOString()
+        })
+      ])
+
+      const vendasSemanaAtual = semanaAtual.data?.faturamentoTotal || 0
+      const vendasSemanaPassada = semanaPassada.data?.faturamentoTotal || 0
+
+      const percentualVsSemanaPassada = vendasSemanaPassada > 0 
+        ? ((vendasSemanaAtual - vendasSemanaPassada) / vendasSemanaPassada) * 100 
+        : 0
+
+      // TODO: Implementar análise real de melhor/pior dia
+      const melhorDia = 'Sexta-feira'
+      const piorDia = 'Segunda-feira'
+
+      return {
+        vendas: vendasSemanaAtual,
+        percentualVsSemanaPassada: Math.round(percentualVsSemanaPassada),
+        melhorDia,
+        piorDia
+      }
+    } catch (error) {
+      console.error('Erro ao calcular métricas da semana:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Calcula métricas de clientes com análise de comportamento
+   */
+  async calcularMetricasClientes() {
+    try {
+      const hoje = new Date()
+      const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+
+      const [estatisticasClientes, clientesHoje] = await Promise.all([
+        clientesService.getEstatisticas(),
+        // TODO: Implementar busca de clientes novos hoje
+        Promise.resolve({ data: { novosHoje: 0 } })
+      ])
+
+      const totalAtivos = estatisticasClientes.data?.total || 0
+      const novosHoje = 0 // TODO: Implementar contagem real
+      const taxaRetorno = 68 // TODO: Implementar cálculo real
+      const satisfacaoMedia = 4.7 // TODO: Implementar sistema de avaliações
+
+      return {
+        novosHoje,
+        taxaRetorno,
+        totalAtivos,
+        satisfacaoMedia
+      }
+    } catch (error) {
+      console.error('Erro ao calcular métricas de clientes:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Carrega todas as métricas executivas em paralelo
+   */
+  async carregarMetricasExecutivas(metaDiaria?: number): Promise<MetricasExecutivas> {
+    try {
+      const [
+        caixa,
+        vendas,
+        comandas,
+        profissionaisAtivos,
+        semanaAtual,
+        clientes
+      ] = await Promise.all([
+        this.calcularMetricasCaixa(),
+        this.calcularMetricasVendas(metaDiaria),
+        this.calcularMetricasComandas(),
+        this.calcularMetricasProfissionais(),
+        this.calcularMetricasSemana(),
+        this.calcularMetricasClientes()
+      ])
+
+      return {
+        caixa,
+        vendas,
+        comandas,
+        profissionaisAtivos,
+        semanaAtual,
+        clientes
+      }
+    } catch (error) {
+      console.error('Erro ao carregar métricas executivas:', error)
+      throw error
+    }
+  }
+}
+
+// Instância singleton
+export const dashboardExecutivoService = new DashboardExecutivoService()
+export default dashboardExecutivoService 

@@ -1,176 +1,375 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { DashboardMetrics } from './useDashboardMetrics'
 
-interface CacheEntry {
-  data: DashboardMetrics
+// ============================================================================
+// INTERFACES DE CACHE
+// ============================================================================
+
+interface CacheEntry<T = any> {
+  data: T
   timestamp: number
-  filters?: any
-  periodoAtual?: any
-  periodoComparacao?: any
+  ttl: number // Time to live em ms
+  key: string
+  invalidationTags: string[]
 }
 
 interface CacheConfig {
-  maxAge: number // tempo em milissegundos
-  maxSize: number // número máximo de entradas
+  defaultTTL: number // 5 minutos default
+  maxEntries: number // Máximo 100 entradas
+  enableCompression: boolean
+  enablePersistence: boolean
 }
 
-const defaultConfig: CacheConfig = {
-  maxAge: 5 * 60 * 1000, // 5 minutos
-  maxSize: 50 // máximo 50 entradas em cache
+interface InvalidationRule {
+  tag: string
+  dependencies: string[]
+  autoInvalidate: boolean
 }
 
-export interface UseDashboardCacheReturn {
-  getCachedData: (key: string) => DashboardMetrics | null
-  setCachedData: (key: string, data: DashboardMetrics, metadata?: any) => void
-  invalidateCache: (pattern?: string) => void
-  clearCache: () => void
-  getCacheStats: () => {
-    size: number
-    hits: number
-    misses: number
-    hitRate: number
+// ============================================================================
+// HOOK DE CACHE AVANÇADO
+// ============================================================================
+
+export function useDashboardCache(config: Partial<CacheConfig> = {}) {
+  const cacheConfig: CacheConfig = {
+    defaultTTL: 5 * 60 * 1000, // 5 minutos
+    maxEntries: 100,
+    enableCompression: false,
+    enablePersistence: true,
+    ...config
   }
-  isDataStale: (key: string) => boolean
-}
 
-export function useDashboardCache(config: Partial<CacheConfig> = {}): UseDashboardCacheReturn {
-  const cacheConfig = { ...defaultConfig, ...config }
-  const cache = useRef<Map<string, CacheEntry>>(new Map())
-  const stats = useRef({ hits: 0, misses: 0 })
+  // Estados do cache
+  const [cache, setCache] = useState<Map<string, CacheEntry>>(new Map())
+  const [stats, setStats] = useState({
+    hits: 0,
+    misses: 0,
+    invalidations: 0,
+    totalRequests: 0
+  })
 
-  // Função para gerar chave de cache baseada nos filtros
-  const generateCacheKey = useCallback((filters?: any, periodoAtual?: any, periodoComparacao?: any) => {
-    const keyParts = [
-      filters?.periodoPreset || 'default',
-      filters?.profissionalSelecionado || 'all',
-      filters?.clienteSelecionado || 'all',
-      filters?.tipoMetrica || 'todas',
-      periodoAtual?.inicio?.toISOString() || '',
-      periodoAtual?.fim?.toISOString() || '',
-      periodoComparacao?.inicio?.toISOString() || '',
-      filters?.exibirComparacao ? 'comp' : 'nocomp'
-    ]
-    return keyParts.join('|')
+  // Referências para debounce e cleanup
+  const debounceTimers = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const invalidationRules = useRef<Map<string, InvalidationRule>>(new Map())
+
+  // ============================================================================
+  // FUNÇÕES DE CACHE CORE
+  // ============================================================================
+
+  const generateCacheKey = useCallback((
+    baseKey: string, 
+    params?: Record<string, any>, 
+    user?: string
+  ): string => {
+    const paramsString = params ? JSON.stringify(params) : ''
+    const userString = user || 'default'
+    return `${baseKey}:${userString}:${btoa(paramsString)}`
   }, [])
 
-  // Função para limpar entradas expiradas
-  const cleanExpiredEntries = useCallback(() => {
-    const now = Date.now()
-    const expiredKeys: string[] = []
+  const isExpired = useCallback((entry: CacheEntry): boolean => {
+    return Date.now() - entry.timestamp > entry.ttl
+  }, [])
 
-    cache.current.forEach((entry, key) => {
-      if (now - entry.timestamp > cacheConfig.maxAge) {
-        expiredKeys.push(key)
-      }
-    })
-
-    expiredKeys.forEach(key => cache.current.delete(key))
-  }, [cacheConfig.maxAge])
-
-  // Função para remover entradas mais antigas quando atingir o limite
-  const evictOldestEntries = useCallback(() => {
-    if (cache.current.size <= cacheConfig.maxSize) return
-
-    const entries = Array.from(cache.current.entries())
-    entries.sort((a, b) => a[1].timestamp - b[1].timestamp)
-
-    const toRemove = entries.slice(0, cache.current.size - cacheConfig.maxSize + 1)
-    toRemove.forEach(([key]) => cache.current.delete(key))
-  }, [cacheConfig.maxSize])
-
-  // Limpar cache periodicamente
-  useEffect(() => {
-    const interval = setInterval(() => {
-      cleanExpiredEntries()
-    }, 60 * 1000) // limpar a cada 1 minuto
-
-    return () => clearInterval(interval)
-  }, [cleanExpiredEntries])
-
-  const getCachedData = useCallback((key: string): DashboardMetrics | null => {
-    const entry = cache.current.get(key)
-    
-    if (!entry) {
-      stats.current.misses++
-      return null
-    }
-
-    // Verificar se dados estão expirados
-    if (Date.now() - entry.timestamp > cacheConfig.maxAge) {
-      cache.current.delete(key)
-      stats.current.misses++
-      return null
-    }
-
-    stats.current.hits++
-    return entry.data
-  }, [cacheConfig.maxAge])
-
-  const setCachedData = useCallback((
+  const set = useCallback(<T>(
     key: string, 
-    data: DashboardMetrics, 
-    metadata?: any
-  ) => {
-    cleanExpiredEntries()
-    evictOldestEntries()
-
-    const entry: CacheEntry = {
+    data: T, 
+    ttl: number = cacheConfig.defaultTTL,
+    tags: string[] = []
+  ): void => {
+    const entry: CacheEntry<T> = {
       data,
       timestamp: Date.now(),
-      ...metadata
+      ttl,
+      key,
+      invalidationTags: tags
     }
 
-    cache.current.set(key, entry)
-  }, [cleanExpiredEntries, evictOldestEntries])
-
-  const invalidateCache = useCallback((pattern?: string) => {
-    if (!pattern) {
-      cache.current.clear()
-      return
-    }
-
-    // Invalidar entradas que correspondem ao padrão
-    const keysToDelete: string[] = []
-    cache.current.forEach((_, key) => {
-      if (key.includes(pattern)) {
-        keysToDelete.push(key)
+    setCache(prev => {
+      const newCache = new Map(prev)
+      
+      // Limpar cache se exceder máximo
+      if (newCache.size >= cacheConfig.maxEntries) {
+        const oldestKey = Array.from(newCache.keys())[0]
+        newCache.delete(oldestKey)
       }
+
+      newCache.set(key, entry)
+      return newCache
     })
 
-    keysToDelete.forEach(key => cache.current.delete(key))
-  }, [])
-
-  const clearCache = useCallback(() => {
-    cache.current.clear()
-    stats.current = { hits: 0, misses: 0 }
-  }, [])
-
-  const getCacheStats = useCallback(() => {
-    const totalRequests = stats.current.hits + stats.current.misses
-    return {
-      size: cache.current.size,
-      hits: stats.current.hits,
-      misses: stats.current.misses,
-      hitRate: totalRequests > 0 ? (stats.current.hits / totalRequests) * 100 : 0
+    // Persistir se habilitado
+    if (cacheConfig.enablePersistence) {
+      try {
+        localStorage.setItem(`dashboard_cache_${key}`, JSON.stringify(entry))
+      } catch (error) {
+        console.warn('Erro ao persistir cache:', error)
+      }
     }
+  }, [cacheConfig.defaultTTL, cacheConfig.maxEntries, cacheConfig.enablePersistence])
+
+  const get = useCallback(<T>(key: string): T | null => {
+    setStats(prev => ({ ...prev, totalRequests: prev.totalRequests + 1 }))
+
+    const entry = cache.get(key)
+    
+    if (entry && !isExpired(entry)) {
+      setStats(prev => ({ ...prev, hits: prev.hits + 1 }))
+      return entry.data as T
+    }
+
+    setStats(prev => ({ ...prev, misses: prev.misses + 1 }))
+
+    // Tentar carregar do localStorage se habilitado
+    if (cacheConfig.enablePersistence) {
+      try {
+        const stored = localStorage.getItem(`dashboard_cache_${key}`)
+        if (stored) {
+          const storedEntry: CacheEntry<T> = JSON.parse(stored)
+          if (!isExpired(storedEntry)) {
+            set(key, storedEntry.data, storedEntry.ttl, storedEntry.invalidationTags)
+            return storedEntry.data
+          }
+        }
+      } catch (error) {
+        console.warn('Erro ao carregar cache persistido:', error)
+      }
+    }
+
+    return null
+  }, [cache, isExpired, cacheConfig.enablePersistence, set])
+
+  // ============================================================================
+  // SISTEMA DE INVALIDAÇÃO INTELIGENTE
+  // ============================================================================
+
+  const addInvalidationRule = useCallback((rule: InvalidationRule) => {
+    invalidationRules.current.set(rule.tag, rule)
   }, [])
 
-  const isDataStale = useCallback((key: string): boolean => {
-    const entry = cache.current.get(key)
-    if (!entry) return true
+  const invalidateByTag = useCallback((tag: string, cascade: boolean = true) => {
+    setCache(prev => {
+      const newCache = new Map(prev)
+      let invalidatedCount = 0
+
+      // Invalidar entradas com a tag
+      prev.forEach((entry, key) => {
+        if (entry.invalidationTags.includes(tag)) {
+          newCache.delete(key)
+          invalidatedCount++
+          
+          // Remover do localStorage também
+          if (cacheConfig.enablePersistence) {
+            try {
+              localStorage.removeItem(`dashboard_cache_${key}`)
+            } catch (error) {
+              console.warn('Erro ao remover cache persistido:', error)
+            }
+          }
+        }
+      })
+
+      // Invalidação em cascata baseada nas regras
+      if (cascade) {
+        invalidationRules.current.forEach((rule, ruleTag) => {
+          if (rule.dependencies.includes(tag)) {
+            invalidateByTag(ruleTag, false) // Evitar loop infinito
+          }
+        })
+      }
+
+      setStats(prev => ({ ...prev, invalidations: prev.invalidations + invalidatedCount }))
+      return newCache
+    })
+  }, [cacheConfig.enablePersistence])
+
+  const invalidateByPrefix = useCallback((prefix: string) => {
+    setCache(prev => {
+      const newCache = new Map(prev)
+      let invalidatedCount = 0
+
+      prev.forEach((entry, key) => {
+        if (key.startsWith(prefix)) {
+          newCache.delete(key)
+          invalidatedCount++
+          
+          if (cacheConfig.enablePersistence) {
+            try {
+              localStorage.removeItem(`dashboard_cache_${key}`)
+            } catch (error) {
+              console.warn('Erro ao remover cache persistido:', error)
+            }
+          }
+        }
+      })
+
+      setStats(prev => ({ ...prev, invalidations: prev.invalidations + invalidatedCount }))
+      return newCache
+    })
+  }, [cacheConfig.enablePersistence])
+
+  // ============================================================================
+  // DEBOUNCE AVANÇADO
+  // ============================================================================
+
+  const debouncedSet = useCallback(<T>(
+    key: string,
+    dataFetcher: () => Promise<T>,
+    delay: number = 300,
+    ttl?: number,
+    tags?: string[]
+  ): Promise<T> => {
+    return new Promise((resolve, reject) => {
+      // Limpar timer anterior se existir
+      const existingTimer = debounceTimers.current.get(key)
+      if (existingTimer) {
+        clearTimeout(existingTimer)
+      }
+
+      // Verificar se já tem no cache
+      const cached = get<T>(key)
+      if (cached) {
+        resolve(cached)
+        return
+      }
+
+      // Criar novo timer debounced
+      const timer = setTimeout(async () => {
+        try {
+          const data = await dataFetcher()
+          set(key, data, ttl, tags)
+          resolve(data)
+        } catch (error) {
+          reject(error)
+        } finally {
+          debounceTimers.current.delete(key)
+        }
+      }, delay)
+
+      debounceTimers.current.set(key, timer)
+    })
+  }, [get, set])
+
+  // ============================================================================
+  // UTILITÁRIOS
+  // ============================================================================
+
+  const clear = useCallback(() => {
+    setCache(new Map())
+    setStats({ hits: 0, misses: 0, invalidations: 0, totalRequests: 0 })
     
-    return Date.now() - entry.timestamp > cacheConfig.maxAge
-  }, [cacheConfig.maxAge])
+    // Limpar localStorage também
+    if (cacheConfig.enablePersistence) {
+      try {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('dashboard_cache_')) {
+            localStorage.removeItem(key)
+          }
+        })
+      } catch (error) {
+        console.warn('Erro ao limpar cache persistido:', error)
+      }
+    }
+  }, [cacheConfig.enablePersistence])
+
+  const getStats = useCallback(() => ({
+    ...stats,
+    hitRate: stats.totalRequests > 0 ? (stats.hits / stats.totalRequests) * 100 : 0,
+    size: cache.size
+  }), [stats, cache.size])
+
+  const prune = useCallback(() => {
+    setCache(prev => {
+      const newCache = new Map(prev)
+      let prunedCount = 0
+
+      prev.forEach((entry, key) => {
+        if (isExpired(entry)) {
+          newCache.delete(key)
+          prunedCount++
+          
+          if (cacheConfig.enablePersistence) {
+            try {
+              localStorage.removeItem(`dashboard_cache_${key}`)
+            } catch (error) {
+              console.warn('Erro ao remover cache expirado:', error)
+            }
+          }
+        }
+      })
+
+      console.log(`Cache: removidas ${prunedCount} entradas expiradas`)
+      return newCache
+    })
+  }, [isExpired, cacheConfig.enablePersistence])
+
+  // ============================================================================
+  // SETUP DE REGRAS DE INVALIDAÇÃO
+  // ============================================================================
+
+  useEffect(() => {
+    // Regras de invalidação para dashboard
+    addInvalidationRule({
+      tag: 'vendas',
+      dependencies: ['comandas', 'caixa'],
+      autoInvalidate: true
+    })
+
+    addInvalidationRule({
+      tag: 'profissionais',
+      dependencies: ['vendas', 'agendamentos'],
+      autoInvalidate: true
+    })
+
+    addInvalidationRule({
+      tag: 'alertas',
+      dependencies: ['vendas', 'caixa', 'profissionais'],
+      autoInvalidate: true
+    })
+
+    addInvalidationRule({
+      tag: 'comparativos',
+      dependencies: ['vendas', 'comandas'],
+      autoInvalidate: true
+    })
+
+    // Timer de limpeza automática (a cada 10 minutos)
+    const pruneInterval = setInterval(prune, 10 * 60 * 1000)
+
+    return () => {
+      clearInterval(pruneInterval)
+      
+      // Limpar todos os timers de debounce
+      debounceTimers.current.forEach(timer => clearTimeout(timer))
+      debounceTimers.current.clear()
+    }
+  }, [addInvalidationRule, prune])
+
+  // ============================================================================
+  // RETURN
+  // ============================================================================
 
   return {
-    getCachedData,
-    setCachedData,
-    invalidateCache,
-    clearCache,
-    getCacheStats,
-    isDataStale,
-    generateCacheKey
-  } as UseDashboardCacheReturn & { generateCacheKey: typeof generateCacheKey }
+    // Funções principais
+    set,
+    get,
+    clear,
+    prune,
+
+    // Invalidação
+    invalidateByTag,
+    invalidateByPrefix,
+    addInvalidationRule,
+
+    // Debounce
+    debouncedSet,
+
+    // Utilitários
+    generateCacheKey,
+    getStats,
+
+    // Estado
+    stats: getStats()
+  }
 }
 
 export default useDashboardCache 

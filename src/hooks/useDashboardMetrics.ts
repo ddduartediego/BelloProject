@@ -109,8 +109,8 @@ export function useDashboardMetrics(options?: {
 
   // Sistema de cache
   const cache = useDashboardCache({
-    maxAge: 5 * 60 * 1000, // 5 minutos
-    maxSize: 50
+    defaultTTL: 5 * 60 * 1000, // 5 minutos
+    maxEntries: 50
   })
 
   // Função para gerar chave de cache baseada nos filtros
@@ -140,9 +140,10 @@ export function useDashboardMetrics(options?: {
         options?.periodoComparacao
       )
 
-      // Verificar se temos dados em cache
-      const cachedData = cache.getCachedData(cacheKey)
-      if (cachedData && !cache.isDataStale(cacheKey)) {
+      // Verificar cache primeiro
+      const cachedData = cache.get<DashboardMetrics>(cacheKey)
+      if (cachedData) {
+        console.log(`Cache hit para ${cacheKey}`)
         setMetrics(cachedData)
         setLoading(false)
         return
@@ -294,11 +295,7 @@ export function useDashboardMetrics(options?: {
       }
 
       // Salvar no cache
-      cache.setCachedData(cacheKey, dashboardMetrics, {
-        filters: options?.filters,
-        periodoAtual: options?.periodoAtual,
-        periodoComparacao: options?.periodoComparacao
-      })
+      cache.set(cacheKey, dashboardMetrics, 5 * 60 * 1000, ['dashboard'])
 
       setMetrics(dashboardMetrics)
     } catch (err) {
@@ -320,7 +317,7 @@ export function useDashboardMetrics(options?: {
       options?.periodoAtual,
       options?.periodoComparacao
     )
-    cache.invalidateCache(cacheKey)
+    cache.invalidateByTag('dashboard', true)
     await fetchMetrics()
   }
 
