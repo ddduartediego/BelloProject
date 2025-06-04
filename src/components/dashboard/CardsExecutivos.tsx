@@ -152,9 +152,9 @@ const CardExecutivo = memo(function CardExecutivo({
         </Typography>
 
         {subtitle && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          <Box sx={{ mb: 1, color: 'text.secondary', fontSize: '0.875rem' }}>
             {subtitle}
-          </Typography>
+          </Box>
         )}
 
         {trend && (
@@ -167,9 +167,9 @@ const CardExecutivo = memo(function CardExecutivo({
         )}
 
         {info && (
-          <Typography variant="caption" color="text.secondary">
+          <Box sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
             {info}
-          </Typography>
+          </Box>
         )}
       </CardContent>
     </Card>
