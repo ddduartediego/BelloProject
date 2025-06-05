@@ -1,41 +1,44 @@
 'use client'
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Box,
+  Typography,
   Paper,
   Tabs,
   Tab,
-  Typography,
+  IconButton,
   CircularProgress,
   Alert,
-  IconButton,
-  Chip,
-  Backdrop
+  Chip
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
   People as PeopleIcon,
-  Analytics as AnalyticsIcon,
+  Compare as CompareIcon,
   Notifications as NotificationsIcon,
   Refresh as RefreshIcon,
-  Schedule as ScheduleIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Schedule as ScheduleIcon
 } from '@mui/icons-material'
-import { TabDashboard, DashboardConfig } from '@/types/dashboard'
+
+// Hooks e serviços
 import useDashboardModular from '@/hooks/useDashboardModular'
+
+// Componentes específicos das abas
 import CardsExecutivos from '@/components/dashboard/CardsExecutivos'
 import AbaProfissionais from '@/components/dashboard/AbaProfissionais'
 import AbaComparativosAvancados from '@/components/dashboard/AbaComparativosAvancados'
 import AbaAlertas from '@/components/dashboard/AbaAlertas'
-import DashboardConfiguracoes from '@/components/dashboard/DashboardConfiguracoes'
-import NotificacaoSistema, { NotificacaoItem } from '@/components/dashboard/NotificacaoSistema'
-import DashboardFiltrosAvancados, { FiltrosGerais } from '@/components/dashboard/DashboardFiltrosAvancados'
-import FiltrosExecutivos from '@/components/dashboard/FiltrosExecutivos'
+
+// Componentes de filtros específicos (apenas para abas que precisam)
 import FiltrosAvancados from '@/components/dashboard/FiltrosAvancados'
-import { exportacaoRelatoriosService, ConfigExportacao } from '@/services/exportacaoRelatoriosService'
-import { formatDistanceToNow, format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+
+// Componentes de configuração e notificação
+import DashboardConfiguracoes from '@/components/dashboard/DashboardConfiguracoes'
+
+// Types
+import { TabDashboard, DashboardConfig } from '@/types/dashboard'
 
 // ============================================================================
 // CONFIGURAÇÃO DAS ABAS
@@ -77,125 +80,16 @@ interface DashboardModularProps {
 }
 
 // ============================================================================
-// HOOK PARA GERENCIAR NOTIFICAÇÕES
-// ============================================================================
-
-function useNotificacoesDashboard() {
-  const [notificacoes, setNotificacoes] = useState<NotificacaoItem[]>([])
-
-  const adicionarNotificacao = useCallback((notificacao: Omit<NotificacaoItem, 'id' | 'timestamp' | 'lida'>) => {
-    const novaNotificacao: NotificacaoItem = {
-      ...notificacao,
-      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      lida: false
-    }
-
-    setNotificacoes(prev => [novaNotificacao, ...prev].slice(0, 50)) // Manter apenas 50 notificações
-  }, [])
-
-  const marcarComoLida = useCallback((id: string) => {
-    setNotificacoes(prev => 
-      prev.map(notif => 
-        notif.id === id ? { ...notif, lida: true } : notif
-      )
-    )
-  }, [])
-
-  const removerNotificacao = useCallback((id: string) => {
-    setNotificacoes(prev => prev.filter(notif => notif.id !== id))
-  }, [])
-
-  const criarNotificacaoDeAlerta = useCallback((alerta: any) => {
-    adicionarNotificacao({
-      tipo: alerta.tipo === 'CRITICO' ? 'error' : 
-            alerta.tipo === 'ATENCAO' ? 'warning' : 'info',
-      titulo: alerta.titulo,
-      mensagem: alerta.descricao,
-      categoria: alerta.categoria as NotificacaoItem['categoria'],
-      prioridade: alerta.tipo === 'CRITICO' ? 'CRITICA' : 
-                 alerta.tipo === 'ATENCAO' ? 'ALTA' : 'MEDIA',
-      acao: alerta.acao ? {
-        texto: 'Abrir',
-        callback: () => {
-          if (alerta.acao.tipo === 'NAVEGACAO') {
-            window.location.href = alerta.acao.destino
-          }
-        }
-      } : undefined,
-      autoHide: alerta.tipo !== 'CRITICO',
-      duracao: alerta.tipo === 'CRITICO' ? 10000 : 6000
-    })
-  }, [adicionarNotificacao])
-
-  return {
-    notificacoes,
-    adicionarNotificacao,
-    marcarComoLida,
-    removerNotificacao,
-    criarNotificacaoDeAlerta
-  }
-}
-
-// ============================================================================
 // COMPONENTE PRINCIPAL
 // ============================================================================
 
 export default function DashboardModular({ 
   initialTab = 'visao-geral' 
 }: DashboardModularProps) {
-  // Estados
+  // Estados locais
   const [activeTab, setActiveTab] = useState<TabDashboard['id']>(initialTab)
   const [configuracoesOpen, setConfiguracoesOpen] = useState(false)
-  
-  // Novos estados para filtros e exportação
-  const [filtrosAvancados, setFiltrosAvancados] = useState<FiltrosGerais>({
-    periodo: {
-      preset: 'hoje',
-      dataInicio: new Date(),
-      dataFim: new Date()
-    },
-    profissionais: {
-      selecionados: [],
-      incluirInativos: false,
-      apenasComVendas: false,
-      ordenarPor: 'nome'
-    },
-    analise: {
-      metricas: ['vendas', 'comandas'],
-      agruparPor: 'dia',
-      incluirProjecoes: false,
-      mostrarTendencias: true
-    },
-    busca: '',
-    tags: []
-  })
-  const [presetsDisponiveis, setPresetsDisponiveis] = useState<Array<{ nome: string; filtros: FiltrosGerais }>>([
-    {
-      nome: 'Visão Geral',
-      filtros: {
-        periodo: { preset: 'hoje', dataInicio: new Date(), dataFim: new Date() },
-        profissionais: { selecionados: [], incluirInativos: false, apenasComVendas: false, ordenarPor: 'vendas' },
-        analise: { metricas: ['vendas', 'comandas', 'profissionais'], agruparPor: 'dia', incluirProjecoes: false, mostrarTendencias: true },
-        busca: '', tags: []
-      }
-    },
-    {
-      nome: 'Performance Semanal',
-      filtros: {
-        periodo: { preset: 'semana', dataInicio: new Date(), dataFim: new Date() },
-        profissionais: { selecionados: [], incluirInativos: false, apenasComVendas: true, ordenarPor: 'vendas' },
-        analise: { metricas: ['vendas', 'comandas', 'clientes'], agruparPor: 'dia', incluirProjecoes: true, mostrarTendencias: true },
-        busca: '', tags: []
-      }
-    }
-  ])
-  const [profissionaisDisponiveis] = useState([
-    { id: '1', nome: 'Ana Silva', ativo: true },
-    { id: '2', nome: 'Carlos Santos', ativo: true },
-    { id: '3', nome: 'Maria Oliveira', ativo: true },
-    { id: '4', nome: 'João Costa', ativo: false }
-  ])
+  const [isClient, setIsClient] = useState(false)
   
   // Hook principal
   const {
@@ -207,19 +101,16 @@ export default function DashboardModular({
     refreshAll,
     updateConfig,
     filtros,
-    updateFiltros,
-    filtrosExecutivos,
-    updateFiltrosExecutivos,
-    updateMetaDiaria
+    updateFiltros
   } = useDashboardModular()
 
-  // Hook de notificações
-  const {
-    notificacoes,
-    marcarComoLida,
-    removerNotificacao,
-    criarNotificacaoDeAlerta
-  } = useNotificacoesDashboard()
+  // ============================================================================
+  // EFEITO PARA CONTROLAR HYDRATION
+  // ============================================================================
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   // ============================================================================
   // FUNÇÕES AUXILIARES
@@ -229,7 +120,7 @@ export default function DashboardModular({
     switch (iconName) {
       case 'dashboard': return <DashboardIcon />
       case 'people': return <PeopleIcon />
-      case 'analytics': return <AnalyticsIcon />
+      case 'analytics': return <CompareIcon />
       case 'notifications': return <NotificationsIcon />
       default: return <DashboardIcon />
     }
@@ -253,17 +144,24 @@ export default function DashboardModular({
   }
 
   const formatLastUpdate = (timestamp: string) => {
-    try {
-      return formatDistanceToNow(new Date(timestamp), {
-        addSuffix: true,
-        locale: ptBR
-      })
-    } catch {
-      return 'agora'
+    if (!isClient) {
+      // Durante SSR, retornar texto genérico para evitar hydration mismatch
+      return 'recentemente'
     }
+
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
+    
+    if (diffInMinutes < 1) return 'há poucos segundos'
+    if (diffInMinutes < 60) return `há ${diffInMinutes} minuto${diffInMinutes > 1 ? 's' : ''}`
+    
+    const diffInHours = Math.floor(diffInMinutes / 60)
+    if (diffInHours < 24) return `há ${diffInHours} hora${diffInHours > 1 ? 's' : ''}`
+    
+    return date.toLocaleDateString('pt-BR')
   }
 
-  // Função para mapear loading da aba para loading das métricas
   const getLoadingForTab = (tabId: TabDashboard['id']) => {
     switch (tabId) {
       case 'visao-geral': return loading.executivas
@@ -286,98 +184,6 @@ export default function DashboardModular({
     updateConfig(newConfig)
     setConfiguracoesOpen(false)
   }
-
-  // ============================================================================
-  // NOVOS HANDLERS PARA FILTROS E EXPORTAÇÃO
-  // ============================================================================
-
-  const handleFiltrosChange = useCallback((novosFiltros: FiltrosGerais) => {
-    setFiltrosAvancados(novosFiltros)
-    
-    // Recarregar dados com novos filtros
-    // TODO: Implementar filtros no hook useDashboardModular
-    console.log('Filtros aplicados:', novosFiltros)
-    
-    // Adicionar notificação de filtros aplicados
-    if (metrics) {
-      // Implementar lógica de filtros aqui
-    }
-  }, [metrics])
-
-  const handleSalvarPreset = useCallback((nome: string, filtros: FiltrosGerais) => {
-    const novoPreset = { nome, filtros }
-    setPresetsDisponiveis(prev => [...prev, novoPreset])
-    
-    // Salvar no localStorage para persistência
-    try {
-      const presetsAtualizados = [...presetsDisponiveis, novoPreset]
-      localStorage.setItem('dashboard_presets', JSON.stringify(presetsAtualizados))
-    } catch (error) {
-      console.warn('Erro ao salvar preset:', error)
-    }
-  }, [presetsDisponiveis])
-
-  const handleExportar = useCallback(async (formato: 'pdf' | 'excel' | 'csv') => {
-    if (!metrics) {
-      console.warn('Nenhuma métrica disponível para exportação')
-      return
-    }
-
-    try {
-      const configExportacao: ConfigExportacao = {
-        incluirGraficos: true,
-        incluirDetalhamento: true,
-        incluirInsights: true,
-        incluirRecomendacoes: true,
-        formatoData: 'completo',
-        idioma: 'pt-BR'
-      }
-
-      const dados = exportacaoRelatoriosService.gerarDadosRelatorio(
-        metrics,
-        filtrosAvancados,
-        configExportacao
-      )
-
-      switch (formato) {
-        case 'pdf':
-          await exportacaoRelatoriosService.exportarPDF(dados, configExportacao)
-          break
-        case 'excel':
-          await exportacaoRelatoriosService.exportarExcel(dados, configExportacao)
-          break
-        case 'csv':
-          await exportacaoRelatoriosService.exportarCSV(dados, configExportacao)
-          break
-      }
-
-      // Adicionar notificação de sucesso
-      // TODO: Implementar através do sistema de notificações
-      console.log(`Relatório ${formato.toUpperCase()} exportado com sucesso`)
-
-    } catch (error) {
-      console.error('Erro na exportação:', error)
-      // TODO: Implementar notificação de erro
-    }
-  }, [metrics, filtrosAvancados])
-
-  // ============================================================================
-  // EFEITO PARA CARREGAR PRESETS SALVOS
-  // ============================================================================
-
-  useEffect(() => {
-    try {
-      const presetsSalvos = localStorage.getItem('dashboard_presets')
-      if (presetsSalvos) {
-        const presets = JSON.parse(presetsSalvos)
-        setPresetsDisponiveis(prev => [...prev, ...presets.filter((p: any) => 
-          !prev.some(existing => existing.nome === p.nome)
-        )])
-      }
-    } catch (error) {
-      console.warn('Erro ao carregar presets salvos:', error)
-    }
-  }, [])
 
   // ============================================================================
   // RENDERIZAÇÃO DO CONTEÚDO DA ABA
@@ -438,18 +244,7 @@ export default function DashboardModular({
       case 'visao-geral':
         return (
           <Box>
-            {/* Filtros Executivos para Visão Geral */}
-            <FiltrosExecutivos
-              periodo={filtrosExecutivos || { inicio: new Date().toISOString(), fim: new Date().toISOString() }}
-              metaDiaria={config.metas?.vendaDiaria}
-              config={config}
-              onPeriodoChange={updateFiltrosExecutivos || (() => {})}
-              onMetaChange={updateMetaDiaria || (() => {})}
-              onConfigChange={updateConfig}
-              loading={loading.executivas}
-            />
-            
-            {/* Cards Executivos */}
+            {/* Cards Executivos - sempre dados de hoje */}
             <CardsExecutivos 
               metrics={metrics.executivas}
               loading={loading.executivas}
@@ -502,26 +297,6 @@ export default function DashboardModular({
 
   return (
     <Box>
-      {/* Sistema de Notificações */}
-      <NotificacaoSistema
-        notificacoes={notificacoes}
-        onNotificacaoLida={marcarComoLida}
-        onNotificacaoRemovida={removerNotificacao}
-        maxNotificacoesVisiveis={3}
-        posicao="top-right"
-      />
-
-      {/* Filtros Avançados */}
-      <DashboardFiltrosAvancados
-        filtros={filtrosAvancados}
-        onFiltrosChange={handleFiltrosChange}
-        onExportar={handleExportar}
-        onSalvarPreset={handleSalvarPreset}
-        presetsDisponiveis={presetsDisponiveis}
-        profissionaisDisponiveis={profissionaisDisponiveis}
-        loading={loading.geral}
-      />
-
       {/* Header com informações e controles */}
       <Box sx={{ 
         display: 'flex', 
@@ -626,25 +401,6 @@ export default function DashboardModular({
           {renderTabContent()}
         </Box>
       </Paper>
-
-      {/* Backdrop para loading geral */}
-      <Backdrop 
-        open={loading.geral && !metrics} 
-        sx={{ 
-          color: '#fff', 
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-          flexDirection: 'column',
-          gap: 2
-        }}
-      >
-        <CircularProgress color="inherit" size={60} />
-        <Typography variant="h6">
-          Carregando dashboard...
-        </Typography>
-        <Typography variant="body2" sx={{ opacity: 0.8 }}>
-          Buscando dados reais do sistema
-        </Typography>
-      </Backdrop>
 
       {/* Modal de Configurações */}
       <DashboardConfiguracoes

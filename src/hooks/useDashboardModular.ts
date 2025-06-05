@@ -56,7 +56,7 @@ const getDefaultFiltersProfissionais = (): FiltroAvancado => {
   }
 }
 
-// Filtros padrão para executivos (hoje)
+// Filtros padrão para executivos (sempre hoje)
 const getDefaultFiltersExecutivos = (): FiltroAvancado => {
   const hoje = new Date()
   const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
@@ -99,8 +99,10 @@ export function useDashboardModular(): UseDashboardModularReturn {
   
   // Estados de filtros separados
   const [filtrosProfissionais, setFiltrosProfissionais] = useState<FiltroAvancado>(getDefaultFiltersProfissionais())
-  const [filtrosExecutivos, setFiltrosExecutivos] = useState<FiltroAvancado>(getDefaultFiltersExecutivos())
   const [filtrosComparativos, setFiltrosComparativos] = useState<FiltroComparativo>(getDefaultFiltersComparativos())
+
+  // Filtros executivos fixos (sempre "hoje")
+  const filtrosExecutivos = getDefaultFiltersExecutivos()
 
   // Cache com configurações específicas por aba
   const cache = useDashboardCache({
@@ -305,32 +307,16 @@ export function useDashboardModular(): UseDashboardModularReturn {
   }, [filtrosProfissionais, cache])
 
   /**
-   * Atualiza filtros executivos e recarrega métricas
-   */
-  const updateFiltrosExecutivos = useCallback(async (novosFiltros: Partial<FiltroAvancado>) => {
-    const filtrosAtualizados = { ...filtrosExecutivos, ...novosFiltros }
-    setFiltrosExecutivos(filtrosAtualizados)
-    
-    // Limpar cache executivos e comparativos (que dependem dos filtros executivos)
-    cache.invalidateByTag('visao-geral', true)
-    cache.invalidateByTag('comparativos', true)
-    
-    // Recarregar abas que dependem dos filtros executivos
-    refreshTab('visao-geral')
-    refreshTab('comparativos')
-  }, [filtrosExecutivos, cache])
-
-  /**
-   * Atualiza filtros comparativos e recarrega métricas
+   * Atualiza filtros de comparativos e recarrega métricas
    */
   const updateFiltrosComparativos = useCallback(async (novosFiltros: Partial<FiltroComparativo>) => {
     const filtrosAtualizados = { ...filtrosComparativos, ...novosFiltros }
     setFiltrosComparativos(filtrosAtualizados)
     
-    // Limpar cache de comparativos
+    // Limpar cache comparativos
     cache.invalidateByTag('comparativos', true)
     
-    // Recarregar aba de comparativos automaticamente
+    // Recarregar aba comparativos
     refreshTab('comparativos')
   }, [filtrosComparativos, cache])
 
@@ -502,12 +488,6 @@ export function useDashboardModular(): UseDashboardModularReturn {
         setFiltrosProfissionais(prev => ({ ...prev, ...parsed }))
       }
 
-      const savedFiltersExecutivos = localStorage.getItem('dashboard_filters_executivos')
-      if (savedFiltersExecutivos) {
-        const parsed = JSON.parse(savedFiltersExecutivos)
-        setFiltrosExecutivos(prev => ({ ...prev, ...parsed }))
-      }
-
       const savedFiltersComparativos = localStorage.getItem('dashboard_filters_comparativos')
       if (savedFiltersComparativos) {
         const parsed = JSON.parse(savedFiltersComparativos)
@@ -547,14 +527,6 @@ export function useDashboardModular(): UseDashboardModularReturn {
 
   useEffect(() => {
     try {
-      localStorage.setItem('dashboard_filters_executivos', JSON.stringify(filtrosExecutivos))
-    } catch (error) {
-      console.warn('Erro ao salvar filtros executivos:', error)
-    }
-  }, [filtrosExecutivos])
-
-  useEffect(() => {
-    try {
       localStorage.setItem('dashboard_filters_comparativos', JSON.stringify(filtrosComparativos))
     } catch (error) {
       console.warn('Erro ao salvar filtros comparativos:', error)
@@ -578,7 +550,6 @@ export function useDashboardModular(): UseDashboardModularReturn {
     updateFiltros: updateFiltrosProfissionais, // Manter compatibilidade
     // Novos filtros executivos
     filtrosExecutivos,
-    updateFiltrosExecutivos,
     updateMetaDiaria,
     // Novos filtros comparativos
     filtrosComparativos,
